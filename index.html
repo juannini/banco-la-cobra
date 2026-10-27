@@ -1,0 +1,2213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banco La Cobra</title>
+    <script>
+    // Aplica el tema guardado antes de pintar, para que no parpadee
+    try { var t = localStorage.getItem('cobra-tema'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --gold: #c9a84c; --gold-light: #f0d080; --gold-dark: #8a6a1e;
+            --black: #0a0a0a; --dark: #111111; --dark2: #1a1a1a; --dark3: #222222;
+            --white: #f5f0e8; --muted: #888880;
+            --red: #e03131; --red-light: #2a1010;
+            --green: #2f9e44; --green-light: #0e2a14;
+            --radius: 16px; --radius-sm: 10px;
+            --shadow: 0 4px 20px rgba(0,0,0,0.4);
+            --shadow-gold: 0 4px 24px rgba(201,168,76,0.25);
+            --sidebar-w: 260px;
+            --bg: #0a0a0a; --ink: 255,255,255; --on-gold: #0a0a0a;
+            --red-text: #ff6b6b; --green-text: #69db7c;
+            --card-a: #1a1508; --card-b: #2a2010;
+            color-scheme: dark;
+        }
+        /* ══ TEMA CLARO ══ */
+        :root[data-theme="light"] {
+            --gold: #a97f16; --gold-light: #c79a2c; --gold-dark: #7d5c0e; --on-gold: #ffffff;
+            --bg: #f4f3ef; --dark: #ffffff; --dark2: #ffffff; --dark3: #f1efe9;
+            --white: #1c1a15; --muted: #6a665b; --ink: 28,24,12;
+            --red: #c92a2a; --red-light: #fdecec; --green: #2b8a3e; --green-light: #e7f5ea;
+            --red-text: #c0392b; --green-text: #237a38;
+            --shadow: 0 1px 2px rgba(40,30,10,.06), 0 6px 20px rgba(40,30,10,.06);
+            --shadow-gold: 0 8px 28px rgba(40,30,10,.22);
+            color-scheme: light;
+        }
+        /* En claro, las tarjetas de saldo siguen oscuras: dan contraste y mantienen la identidad */
+        :root[data-theme="light"] .balance-card,
+        :root[data-theme="light"] .sidebar-balance {
+            --gold: #c9a84c; --gold-light: #f0d080; --gold-dark: #8a6a1e; --on-gold: #0a0a0a;
+            --white: #f5f0e8; --muted: #a09c90; --ink: 255,255,255;
+            background: linear-gradient(145deg,#1a1508 0%,#2a2010 50%,#1a1508 100%);
+        }
+        :root[data-theme="light"] .sidebar { border-right-color: rgba(var(--ink),.08); }
+        :root[data-theme="light"] .topbar { border-bottom-color: rgba(var(--ink),.08); }
+        :root[data-theme="light"] .side-card,
+        :root[data-theme="light"] .history-card,
+        :root[data-theme="light"] .quick-item,
+        :root[data-theme="light"] .stat-card,
+        :root[data-theme="light"] .table-card,
+        :root[data-theme="light"] .admin-tabs,
+        :root[data-theme="light"] .auth-card { border-color: rgba(var(--ink),.09); box-shadow: 0 1px 2px rgba(40,30,10,.05), 0 4px 14px rgba(40,30,10,.04); }
+        :root[data-theme="light"] .quick-item:hover { background: #fff; border-color: rgba(169,127,22,.45); box-shadow: 0 8px 22px rgba(40,30,10,.10); }
+        :root[data-theme="light"] .sidebar-item.active { background: rgba(169,127,22,.10); border-color: rgba(169,127,22,.22); }
+        :root[data-theme="light"] .field input, :root[data-theme="light"] .field select, :root[data-theme="light"] .field textarea { border-color: rgba(var(--ink),.14); background: #fbfaf7; }
+        :root[data-theme="light"] .icon-btn { border-color: rgba(var(--ink),.14); }
+        :root[data-theme="light"] .btn-secondary { border-color: rgba(var(--ink),.18); }
+        :root[data-theme="light"] .modal-overlay, :root[data-theme="light"] .profile-overlay { background: rgba(30,24,10,.45); }
+        body, .sidebar, .topbar, .side-card, .history-card, .modal, .profile-panel, .auth-card, .stat-card, .table-card, .quick-item, .field input, .field select, .field textarea, .icon-btn { transition: background-color .25s ease, border-color .25s ease, color .25s ease; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            color: var(--white);
+            overflow-x: hidden;
+        }
+
+        /* ══════════════════════════════
+           AUTH (centrado, igual que antes)
+        ══════════════════════════════ */
+        .auth-screen {
+            display: none; flex-direction: column; justify-content: center;
+            min-height: 100vh; padding: 20px 16px 60px;
+            align-items: center;
+        }
+        .auth-screen.visible { display: flex; animation: slideUp .5s cubic-bezier(.16,1,.3,1); }
+        @keyframes slideUp { from{opacity:0;transform:translateY(30px);} to{opacity:1;transform:translateY(0);} }
+
+        .auth-inner { width: 100%; max-width: 420px; }
+        .auth-logo { text-align: center; margin-bottom: 28px; }
+        .auth-logo .logo-motoserra { font-size: 52px; line-height: 1; filter: drop-shadow(0 0 20px rgba(201,168,76,.7)); animation: motoPulse 2s ease-in-out infinite; display: block; margin-bottom: 10px; }
+        @keyframes motoPulse { 0%,100%{filter:drop-shadow(0 0 15px rgba(201,168,76,.5));} 50%{filter:drop-shadow(0 0 35px rgba(201,168,76,.9));} }
+        .auth-logo h1 { font-family: 'Bebas Neue', sans-serif; font-size: 44px; letter-spacing: 5px; color: var(--gold); text-shadow: 0 0 30px rgba(201,168,76,.4); line-height: 1; }
+        .auth-logo p { font-size: 12px; color: var(--muted); margin-top: 6px; font-family: 'Space Mono', monospace; letter-spacing: 2px; text-transform: uppercase; }
+        .auth-card { background: var(--dark2); border: 1px solid rgba(201,168,76,.15); border-radius: var(--radius); padding: 24px 20px; box-shadow: var(--shadow); }
+        .auth-tabs { display: flex; background: var(--dark3); border-radius: var(--radius-sm); padding: 4px; margin-bottom: 20px; }
+        .auth-tab { flex: 1; padding: 10px; border: none; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; border-radius: 8px; transition: all .2s; }
+        .auth-tab.active { background: var(--gold); color: var(--on-gold); }
+        .auth-form { display: none; }
+        .auth-form.active { display: block; }
+
+        .verify-step { display: none; }
+        .verify-step.active { display: block; }
+        .btn-send-code { width: auto; padding: 12px 16px; background: rgba(201,168,76,.15); color: var(--gold); border: 1px solid rgba(201,168,76,.3); border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all .15s; font-family: 'DM Sans', sans-serif; }
+        .btn-send-code:hover { background: rgba(201,168,76,.25); }
+        .btn-send-code:disabled { opacity: .5; cursor: not-allowed; }
+
+        .field { margin-bottom: 13px; }
+        .field label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Space Mono', monospace; }
+        .field input, .field select { width: 100%; padding: 12px 13px; border: 1.5px solid rgba(var(--ink),.08); border-radius: var(--radius-sm); font-size: 15px; font-family: 'DM Sans', sans-serif; color: var(--white); outline: none; background: var(--dark3); transition: border-color .15s, box-shadow .15s; }
+        .field input:focus, .field select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,.1); }
+        .field select option { background: var(--dark3); }
+        .field textarea { width: 100%; padding: 12px 13px; border: 1.5px solid rgba(var(--ink),.08); border-radius: var(--radius-sm); font-size: 14px; font-family: 'DM Sans', sans-serif; color: var(--white); background: var(--dark3); outline: none; resize: vertical; min-height: 70px; transition: border-color .15s; }
+        .field textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,.1); }
+        .field .input-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+        .btn-primary { width: 100%; padding: 13px; background: linear-gradient(135deg,var(--gold-dark),var(--gold)); color: var(--on-gold); border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all .15s; margin-top: 8px; letter-spacing: .5px; box-shadow: var(--shadow-gold); }
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+        .btn-secondary { width: 100%; padding: 11px; background: transparent; color: var(--muted); border: 1px solid rgba(var(--ink),.1); border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 8px; transition: all .15s; }
+        .btn-secondary:hover { border-color: var(--gold); color: var(--gold); }
+        .admin-link { text-align: center; margin-top: 18px; font-size: 13px; color: var(--muted); }
+        .admin-link a { color: var(--gold); cursor: pointer; font-weight: 600; }
+        .msg-error { font-size: 12px; color: var(--red-text); margin-top: 8px; display: none; padding: 10px 12px; background: var(--red-light); border-radius: 8px; border: 1px solid rgba(224,49,49,.2); }
+        .msg-success { font-size: 12px; color: var(--green-text); margin-top: 8px; display: none; padding: 10px 12px; background: var(--green-light); border-radius: 8px; border: 1px solid rgba(47,158,68,.2); }
+
+        /* ══════════════════════════════
+           ADMIN LOGIN
+        ══════════════════════════════ */
+        .admin-login-screen { display: none; flex-direction: column; justify-content: center; min-height: 100vh; padding: 20px 16px 60px; align-items: center; }
+        .admin-login-screen.visible { display: flex; animation: slideUp .4s cubic-bezier(.16,1,.3,1); }
+        .admin-login-screen .auth-inner { width: 100%; max-width: 420px; }
+
+        /* ══════════════════════════════
+           LAYOUT DESKTOP: sidebar + contenido
+        ══════════════════════════════ */
+        .desktop-layout {
+            display: none;
+            min-height: 100vh;
+        }
+        .desktop-layout.visible {
+            display: flex;
+            animation: slideUp .4s cubic-bezier(.16,1,.3,1);
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            background: var(--dark);
+            border-right: 1px solid rgba(201,168,76,.1);
+            display: flex;
+            flex-direction: column;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+        .sidebar-logo {
+            padding: 24px 20px 20px;
+            border-bottom: 1px solid rgba(var(--ink),.05);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .sidebar-logo-icon { font-size: 32px; filter: drop-shadow(0 0 12px rgba(201,168,76,.5)); }
+        .sidebar-logo-text h2 { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 3px; color: var(--gold); line-height: 1; }
+        .sidebar-logo-text span { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 1.5px; }
+
+        .sidebar-nav { flex: 1; padding: 16px 12px; }
+        .sidebar-section-label {
+            font-size: 9px; color: var(--muted); font-family: 'Space Mono', monospace;
+            letter-spacing: 2px; text-transform: uppercase; padding: 8px 10px 6px;
+        }
+        .sidebar-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: var(--radius-sm);
+            color: var(--muted); font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all .15s; margin-bottom: 2px;
+            border: 1px solid transparent; user-select: none;
+        }
+        .sidebar-item:hover { background: rgba(var(--ink),.04); color: var(--white); }
+        .sidebar-item.active { background: rgba(201,168,76,.1); color: var(--gold); border-color: rgba(201,168,76,.15); }
+        .sidebar-item i { font-size: 18px; width: 22px; text-align: center; }
+        .sidebar-item .item-label { flex: 1; }
+
+        .sidebar-balance {
+            margin: 8px 12px 0;
+            background: linear-gradient(145deg,var(--card-a),var(--card-b));
+            border: 1px solid rgba(201,168,76,.2);
+            border-radius: var(--radius-sm);
+            padding: 14px;
+        }
+        .sidebar-balance-label { font-size: 9px; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+        .sidebar-balance-amount { font-family: 'Bebas Neue', sans-serif; font-size: 26px; color: var(--white); letter-spacing: 1px; line-height: 1; }
+        .sidebar-balance-amount span { font-size: 14px; color: var(--gold); }
+        .sidebar-balance-alias { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 4px; }
+
+        .sidebar-footer {
+            padding: 16px 12px;
+            border-top: 1px solid rgba(var(--ink),.05);
+        }
+        .sidebar-user {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: var(--radius-sm);
+            cursor: pointer; transition: background .15s;
+        }
+        .sidebar-user:hover { background: rgba(var(--ink),.04); }
+        .sidebar-avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            background: linear-gradient(135deg,var(--gold-dark),var(--gold));
+            display: flex; align-items: center; justify-content: center;
+            color: var(--on-gold); font-size: 14px; font-weight: 800;
+            flex-shrink: 0;
+        }
+        .sidebar-user-info { flex: 1; min-width: 0; }
+        .sidebar-user-name { font-size: 13px; font-weight: 700; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-user-role { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
+        .sidebar-logout { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; border-radius: 6px; transition: color .15s; }
+        .sidebar-logout:hover { color: var(--red-text); }
+
+        /* CONTENIDO PRINCIPAL */
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* TOPBAR desktop */
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px;
+            border-bottom: 1px solid rgba(var(--ink),.05);
+            background: var(--dark);
+            position: sticky; top: 0; z-index: 9;
+        }
+        .topbar-greeting { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; color: var(--white); }
+        .topbar-sub { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 1px; }
+        .topbar-right { display: flex; align-items: center; gap: 10px; }
+        .icon-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--dark2); border: 1px solid rgba(var(--ink),.08); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; cursor: pointer; transition: all .15s; }
+        .icon-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+        /* CONTENIDO SCROLL */
+        .content-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px;
+        }
+
+        /* GRID PRINCIPAL */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+            align-items: start;
+        }
+        .content-main { min-width: 0; }
+        .content-side { min-width: 0; }
+
+        /* BALANCE CARD (desktop, más compacta) */
+        .balance-card {
+            background: linear-gradient(145deg,var(--card-a) 0%,var(--card-b) 50%,var(--card-a) 100%);
+            border: 1px solid rgba(201,168,76,.3);
+            border-radius: var(--radius);
+            padding: 28px 24px 22px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-gold);
+        }
+        .balance-card::before { content: '🐍'; position: absolute; right: -10px; bottom: -20px; font-size: 130px; opacity: .05; filter: grayscale(1); }
+        .balance-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg,transparent,var(--gold),transparent); }
+        .balance-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .balance-card-left { flex: 1; }
+        .balance-tag { display: inline-block; font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 2px; color: var(--gold); background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.2); padding: 3px 8px; border-radius: 4px; margin-bottom: 10px; text-transform: uppercase; }
+        .balance-amount { font-family: 'Bebas Neue', sans-serif; font-size: 52px; letter-spacing: 2px; color: var(--white); line-height: 1; margin-bottom: 4px; }
+        .balance-amount span { font-size: 28px; color: var(--gold); }
+        .balance-alias { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 20px; }
+        .balance-actions { display: flex; gap: 10px; }
+        .bal-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.2); border-radius: var(--radius-sm); color: var(--gold); font-size: 13px; font-weight: 700; padding: 11px 8px; cursor: pointer; transition: all .15s; font-family: 'DM Sans', sans-serif; max-width: 160px; }
+        .bal-btn:hover { background: rgba(201,168,76,.2); border-color: var(--gold); }
+
+        /* QUICK ACTIONS */
+        .section-label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; margin-top: 4px; }
+        .quick-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+        .quick-item { background: var(--dark2); border: 1px solid rgba(var(--ink),.06); border-radius: var(--radius); padding: 16px 10px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; transition: all .2s; }
+        .quick-item:hover { border-color: rgba(201,168,76,.3); background: var(--dark3); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+        .quick-icon { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 21px; color: var(--on-gold); }
+        .quick-label { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1.3; letter-spacing: .3px; text-transform: uppercase; font-family: 'Space Mono', monospace; }
+
+        /* HISTORIAL */
+        .history-card { background: var(--dark2); border: 1px solid rgba(var(--ink),.06); border-radius: var(--radius); overflow: hidden; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px 12px; border-bottom: 1px solid rgba(var(--ink),.06); }
+        .history-header h3 { font-size: 15px; font-weight: 700; color: var(--white); }
+        .filter-bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--ink),.06); overflow-x: auto; scrollbar-width: none; }
+        .filter-bar::-webkit-scrollbar { display: none; }
+        .filter-btn { padding: 5px 12px; border-radius: 100px; border: 1px solid rgba(var(--ink),.1); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .15s; font-family: 'DM Sans', sans-serif; }
+        .filter-btn.active { background: var(--gold); color: var(--on-gold); border-color: var(--gold); }
+        .filter-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold); }
+        .tx-item { display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid rgba(var(--ink),.04); transition: background .1s; cursor: pointer; }
+        .tx-item:last-child { border-bottom: none; }
+        .tx-item:hover { background: rgba(var(--ink),.02); }
+        .tx-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+        .tx-icon.out { background: var(--red-light); color: var(--red-text); }
+        .tx-icon.in { background: var(--green-light); color: var(--green-text); }
+        .tx-info { flex: 1; min-width: 0; }
+        .tx-name { font-size: 13px; font-weight: 600; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tx-date { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: 'Space Mono', monospace; }
+        .tx-amount { font-size: 13px; font-weight: 700; white-space: nowrap; font-family: 'Space Mono', monospace; }
+        .tx-amount.out { color: var(--red-text); }
+        .tx-amount.in { color: var(--green-text); }
+        .tx-empty { padding: 36px 18px; text-align: center; font-size: 13px; color: var(--muted); }
+
+        /* PANEL LATERAL (columna derecha) */
+        .side-card { background: var(--dark2); border: 1px solid rgba(var(--ink),.06); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+        .side-card-header { padding: 14px 16px 10px; border-bottom: 1px solid rgba(var(--ink),.05); }
+        .side-card-title { font-size: 13px; font-weight: 700; color: var(--white); }
+        .side-card-body { padding: 12px 16px 16px; }
+        .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(var(--ink),.04); font-size: 12px; }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        .info-value { color: var(--white); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .copy-mini { background: none; border: none; color: var(--gold); cursor: pointer; font-size: 14px; padding: 2px; }
+        .copy-mini:hover { color: var(--gold-light); }
+        .stat-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .stat-chip { background: var(--dark3); border-radius: var(--radius-sm); padding: 12px; }
+        .stat-chip-label { font-size: 9px; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+        .stat-chip-value { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--white); }
+
+        /* LOADING */
+        .loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 16px; color: var(--muted); font-size: 14px; }
+        .spinner { width: 36px; height: 36px; border: 2px solid rgba(var(--ink),.1); border-top-color: var(--gold); border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg);} }
+
+        /* ══════════════════════════════
+           ADMIN PANEL (dentro del desktop-layout)
+        ══════════════════════════════ */
+        .admin-tabs { display: flex; background: var(--dark2); border-radius: var(--radius); padding: 4px; margin-bottom: 14px; border: 1px solid rgba(var(--ink),.06); gap: 2px; }
+        .admin-tab { flex: 1; padding: 9px 4px; border: none; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; border-radius: 10px; transition: all .2s; }
+        .admin-tab.active { background: var(--gold); color: var(--on-gold); }
+        .admin-panel { display: none; }
+        .admin-panel.active { display: block; }
+        .stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-bottom: 14px; }
+        .stat-card { background: var(--dark2); border: 1px solid rgba(var(--ink),.06); border-radius: var(--radius); padding: 16px; }
+        .stat-label { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+        .stat-value { font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 1px; color: var(--white); line-height: 1; }
+        .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+        .table-card { background: var(--dark2); border: 1px solid rgba(var(--ink),.06); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 400px; }
+        th { background: var(--dark3); padding: 11px 12px; text-align: left; font-weight: 700; color: var(--muted); border-bottom: 1px solid rgba(var(--ink),.06); white-space: nowrap; font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        td { padding: 11px 12px; border-bottom: 1px solid rgba(var(--ink),.04); color: var(--white); }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(var(--ink),.02); }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 100px; font-size: 10px; font-weight: 700; font-family: 'Space Mono', monospace; }
+        .badge.activo { background: var(--green-light); color: var(--green-text); }
+        .badge.in { background: var(--green-light); color: var(--green-text); }
+        .badge.out { background: var(--red-light); color: var(--red-text); }
+        .badge.gold { background: rgba(201,168,76,.1); color: var(--gold); }
+
+        /* Selector de moneda (ARS / USD) */
+        .mon-switch { display: flex; gap: 6px; }
+        .mon-pill { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 6px 12px; border-radius: 100px; border: 1px solid rgba(201,168,76,.2); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; }
+        .mon-pill:hover { border-color: rgba(201,168,76,.5); color: var(--gold); }
+        .mon-pill.active { background: var(--gold); color: var(--on-gold); border-color: var(--gold); }
+
+        /* ══════════════════════════════
+           PERFIL OVERLAY
+        ══════════════════════════════ */
+        .profile-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; opacity: 0; pointer-events: none; transition: opacity .2s; display: flex; justify-content: center; align-items: flex-end; }
+        .profile-overlay.active { opacity: 1; pointer-events: all; }
+        .profile-panel { background: var(--dark2); border-radius: 24px 24px 0 0; border-top: 1px solid rgba(201,168,76,.2); width: 100%; max-width: 480px; padding: 24px 20px 44px; transform: translateY(100%); transition: transform .35s cubic-bezier(.16,1,.3,1); max-height: 90vh; overflow-y: auto; }
+        .profile-overlay.active .profile-panel { transform: translateY(0); }
+        .profile-handle { width: 40px; height: 4px; background: rgba(var(--ink),.1); border-radius: 2px; margin: 0 auto 20px; }
+        .profile-avatar-big { width: 68px; height: 68px; border-radius: 50%; background: linear-gradient(135deg,var(--gold-dark),var(--gold)); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: var(--on-gold); margin: 0 auto 14px; border: 3px solid rgba(201,168,76,.3); }
+        .profile-name { text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; color: var(--white); }
+        .profile-email { text-align: center; font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+        .profile-data { background: var(--dark3); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; }
+        .profile-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(var(--ink),.05); }
+        .profile-row:last-child { border-bottom: none; }
+        .profile-row-label { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; text-transform: uppercase; letter-spacing: 1px; }
+        .profile-row-value { font-size: 12px; color: var(--white); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .copy-btn { width: 24px; height: 24px; border-radius: 6px; background: rgba(201,168,76,.1); border: none; color: var(--gold); cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+        .copy-btn:hover { background: rgba(201,168,76,.2); }
+        .change-pass-section { margin-bottom: 14px; }
+        .change-pass-section h4 { font-size: 13px; font-weight: 700; color: var(--white); margin-bottom: 12px; }
+
+        /* ══ TARJETA DE DÉBITO (según la caja activa) ══ */
+        .tarjeta-wrap { perspective: 1000px; margin-bottom: 20px; }
+        .tarjeta { position: relative; width: 100%; aspect-ratio: 1.586; max-width: 420px; margin: 0 auto; cursor: pointer; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.4,.2,.2,1); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent; }
+        .tarjeta.flipped { transform: rotateY(180deg); }
+        .tarjeta:hover:not(.flipped) { transform: translateY(-3px); }
+        .tarjeta-cara { position: absolute; inset: 0; border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; color: #f5f0e8; border: 1px solid rgba(255,255,255,.14); }
+        .tarjeta-cara::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 85% -10%, rgba(255,255,255,.22), transparent 55%); pointer-events: none; }
+        .tarjeta.ars .tarjeta-cara { background: linear-gradient(135deg,#14110a 0%,#3a2c0e 55%,#8a6a1e 100%); }
+        .tarjeta.usd .tarjeta-cara { background: linear-gradient(135deg,#07130f 0%,#0f3d2e 55%,#1D9E75 100%); }
+        .tarjeta-back { transform: rotateY(180deg); padding: 0 0 16px; }
+        .tarjeta-top { display: flex; justify-content: space-between; align-items: center; position: relative; }
+        .tarjeta-brand { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 3px; display: flex; align-items: center; gap: 8px; }
+        .tarjeta-tipo { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 2px; opacity: .85; text-transform: uppercase; }
+        .tarjeta-mid { display: flex; align-items: center; justify-content: space-between; position: relative; }
+        .tarjeta-chip { width: 44px; height: 33px; border-radius: 7px; background: linear-gradient(135deg,#f0d080,#b8902f 50%,#f0d080); position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+        .tarjeta-chip::before, .tarjeta-chip::after { content: ''; position: absolute; background: rgba(0,0,0,.25); }
+        .tarjeta-chip::before { left: 0; right: 0; top: 50%; height: 1px; }
+        .tarjeta-chip::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+        .tarjeta-nfc { font-size: 22px; opacity: .8; transform: rotate(90deg); }
+        .tarjeta-num { font-family: 'Space Mono', monospace; font-size: clamp(14px, 4.2vw, 18px); letter-spacing: 1.5px; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.4); position: relative; }
+        .tarjeta-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; position: relative; }
+        .tarjeta-label { font-family: 'Space Mono', monospace; font-size: 8px; letter-spacing: 2px; opacity: .7; text-transform: uppercase; margin-bottom: 2px; }
+        .tarjeta-titular { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 230px; }
+        .tarjeta-mon { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; line-height: 1; }
+        .tarjeta-banda { height: 38px; background: rgba(0,0,0,.75); margin: 22px 0 14px; }
+        .tarjeta-back-body { padding: 0 20px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+        .tarjeta-dato { font-family: 'Space Mono', monospace; font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; word-break: break-all; }
+        .tarjeta-dato button { background: rgba(255,255,255,.16); border: none; color: #fff; width: 26px; height: 26px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+        .tarjeta-venc { font-family: 'Space Mono', monospace; font-size: 14px; letter-spacing: 1px; }
+        .tarjeta-firma { display: flex; align-items: center; gap: 0; }
+        .tarjeta-firma-linea { flex: 1; height: 34px; background: repeating-linear-gradient(135deg,#f5f0e8 0 6px,#e4dccb 6px 12px); border-radius: 4px 0 0 4px; }
+        .tarjeta-cvv { background: #fff; color: #111; font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; letter-spacing: 2px; padding: 0 14px; height: 34px; display: flex; align-items: center; border-radius: 0 4px 4px 0; }
+        .tarjeta-copiar { align-self: flex-start; background: rgba(255,255,255,.16); border: none; color: #fff; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .tarjeta-copiar:hover { background: rgba(255,255,255,.26); }
+        .tarjeta-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 10px; font-family: 'Space Mono', monospace; }
+        .tarjeta-narrow { display: none; }
+        @media (max-width: 1100px) { .tarjeta-narrow { display: block; } }
+
+        /* ══ CHATBOT ══ */
+        .chat-fab { position: fixed; right: 24px; bottom: 24px; z-index: 90; width: 58px; height: 58px; border-radius: 50%; border: none; background: linear-gradient(135deg,var(--gold-dark),var(--gold)); color: var(--on-gold); font-size: 26px; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: var(--shadow-gold); transition: transform .2s; }
+        .chat-fab.visible { display: flex; animation: slideUp .4s cubic-bezier(.16,1,.3,1); }
+        .chat-fab:hover { transform: scale(1.07); }
+        .chat-fab .chat-dot { position: absolute; top: 4px; right: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--red-text); border: 2px solid var(--bg); }
+        .chat-panel { position: fixed; right: 24px; bottom: 96px; z-index: 90; width: 380px; max-width: calc(100vw - 32px); height: 560px; max-height: calc(100vh - 120px); background: var(--dark2); border: 1px solid rgba(201,168,76,.25); border-radius: 20px; box-shadow: 0 16px 48px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: translateY(16px) scale(.97); pointer-events: none; transition: opacity .2s, transform .25s cubic-bezier(.16,1,.3,1); }
+        .chat-panel.open { opacity: 1; transform: none; pointer-events: all; }
+        .chat-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg,#14110a,#3a2c0e); color: #f5f0e8; }
+        .chat-head-av { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .chat-head-t { flex: 1; min-width: 0; }
+        .chat-head-t b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 2px; line-height: 1; }
+        .chat-head-t span { font-size: 11px; opacity: .75; font-family: 'Space Mono', monospace; }
+        .chat-close { background: none; border: none; color: #f5f0e8; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 6px; opacity: .8; }
+        .chat-close:hover { opacity: 1; background: rgba(255,255,255,.12); }
+        .chat-msgs { flex: 1; overflow-y: auto; padding: 16px 14px 8px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+        .chat-msg { max-width: 86%; padding: 10px 13px; border-radius: 16px; font-size: 13.5px; line-height: 1.5; word-wrap: break-word; animation: slideUp .25s ease; }
+        .chat-msg.bot { align-self: flex-start; background: var(--dark2); color: var(--white); border: 1px solid rgba(var(--ink),.08); border-bottom-left-radius: 4px; }
+        .chat-msg.user { align-self: flex-end; background: linear-gradient(135deg,var(--gold-dark),var(--gold)); color: var(--on-gold); border-bottom-right-radius: 4px; font-weight: 500; }
+        .chat-msg b { font-weight: 700; }
+        .chat-msg .chat-list { margin: 6px 0 0; padding-left: 18px; }
+        .chat-msg .chat-list li { margin-bottom: 3px; }
+        .chat-mov { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid rgba(var(--ink),.07); font-size: 12.5px; }
+        .chat-mov:last-child { border-bottom: none; }
+        .chat-mov small { display: block; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
+        .chat-mov .in { color: var(--green-text); font-weight: 700; white-space: nowrap; font-family: 'Space Mono', monospace; }
+        .chat-mov .out { color: var(--red-text); font-weight: 700; white-space: nowrap; font-family: 'Space Mono', monospace; }
+        .chat-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+        .chat-acciones button, .chat-chip { border: 1px solid rgba(201,168,76,.45); background: rgba(201,168,76,.10); color: var(--gold); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 700; padding: 6px 11px; border-radius: 100px; cursor: pointer; transition: all .15s; }
+        .chat-acciones button:hover, .chat-chip:hover { background: var(--gold); color: var(--on-gold); }
+        .chat-typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--dark2); border: 1px solid rgba(var(--ink),.08); border-radius: 16px; border-bottom-left-radius: 4px; }
+        .chat-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: chatBlink 1s infinite; }
+        .chat-typing i:nth-child(2) { animation-delay: .15s; } .chat-typing i:nth-child(3) { animation-delay: .3s; }
+        @keyframes chatBlink { 0%,60%,100% { opacity: .25; } 30% { opacity: 1; } }
+        .chat-chips { display: flex; gap: 6px; padding: 8px 12px 0; overflow-x: auto; scrollbar-width: none; background: var(--dark2); border-top: 1px solid rgba(var(--ink),.07); }
+        .chat-chips::-webkit-scrollbar { display: none; }
+        /* Barra propia para desplazar las preguntas sugeridas: solo en PC (con mouse) */
+        .chat-chips-bar { display: none; -webkit-appearance: none; appearance: none; width: calc(100% - 24px); height: 6px; margin: 8px 12px 2px; border-radius: 3px; background: rgba(var(--ink),.14); outline: none; cursor: pointer; }
+        .chat-chips-bar::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 56px; height: 6px; border-radius: 3px; background: var(--gold); cursor: grab; }
+        .chat-chips-bar::-moz-range-thumb { width: 56px; height: 6px; border: none; border-radius: 3px; background: var(--gold); cursor: grab; }
+        .chat-chips-bar::-moz-range-track { background: transparent; }
+        .chat-chips-bar.hay { display: block; }
+        @media (max-width: 768px), (hover: none) { .chat-chips-bar.hay { display: none; } }
+        .chat-chip { white-space: nowrap; flex-shrink: 0; }
+        .chat-form { display: flex; gap: 8px; padding: 10px 12px 12px; background: var(--dark2); }
+        .chat-form input { flex: 1; min-width: 0; padding: 11px 14px; border: 1.5px solid rgba(var(--ink),.12); border-radius: 100px; background: var(--dark3); color: var(--white); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; }
+        .chat-form input:focus { border-color: var(--gold); }
+        .chat-form button { width: 42px; height: 42px; border-radius: 50%; border: none; background: linear-gradient(135deg,var(--gold-dark),var(--gold)); color: var(--on-gold); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        @media (max-width: 768px) {
+            .chat-fab { right: 16px; bottom: 16px; }
+            .chat-panel { right: 0; left: 0; bottom: 0; width: 100%; max-width: 100%; height: 82vh; max-height: none; border-radius: 22px 22px 0 0; border-left: none; border-right: none; border-bottom: none; }
+        }
+
+        /* Foto de perfil */
+        .has-photo { background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important; color: transparent !important; }
+        .profile-avatar-wrap { position: relative; width: 92px; height: 92px; margin: 0 auto 14px; }
+        .profile-avatar-wrap .profile-avatar-big { width: 92px; height: 92px; font-size: 34px; margin: 0; }
+        .avatar-edit { position: absolute; right: -2px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--dark2); background: var(--gold); color: var(--on-gold); display: flex; align-items: center; justify-content: center; font-size: 15px; cursor: pointer; transition: transform .15s; }
+        .avatar-edit:hover { transform: scale(1.1); }
+        .foto-actions { display: flex; justify-content: center; gap: 8px; margin: -6px 0 16px; }
+        .foto-actions button { background: none; border: none; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--gold); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+        .foto-actions button:hover { background: rgba(201,168,76,.12); }
+        .foto-actions button.danger { color: var(--red-text); }
+        .foto-actions button.danger:hover { background: var(--red-light); }
+        .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--dark3); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px; }
+        .theme-row-label { font-size: 13px; font-weight: 700; color: var(--white); display: flex; align-items: center; gap: 8px; }
+        .theme-fab { position: fixed; top: 16px; right: 16px; z-index: 5; }
+
+        /* ══════════════════════════════
+           COMPROBANTE
+        ══════════════════════════════ */
+        .comprobante-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+        .comprobante-overlay.active { opacity: 1; pointer-events: all; }
+        .comprobante-box { background: var(--dark2); border: 1px solid rgba(201,168,76,.2); border-radius: var(--radius); padding: 28px 24px; width: 100%; max-width: 380px; position: relative; animation: slideUp .3s ease; }
+        .comprobante-header { text-align: center; margin-bottom: 24px; }
+        .comprobante-icon { font-size: 48px; margin-bottom: 10px; }
+        .comprobante-titulo { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; color: var(--gold); }
+        .comprobante-subtitulo { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'Space Mono', monospace; }
+        .comprobante-monto { font-family: 'Bebas Neue', sans-serif; font-size: 42px; color: var(--white); text-align: center; margin: 16px 0; letter-spacing: 2px; }
+        .comprobante-monto span { font-size: 22px; color: var(--gold); }
+        .comprobante-datos { background: var(--dark3); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 20px; }
+        .comprobante-fila { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(var(--ink),.05); font-size: 12px; }
+        .comprobante-fila:last-child { border-bottom: none; }
+        .comprobante-fila-label { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        .comprobante-fila-valor { color: var(--white); font-weight: 600; text-align: right; max-width: 60%; word-break: break-word; }
+        .comprobante-btns { display: flex; gap: 8px; }
+        .comprobante-btns button { flex: 1; }
+
+        /* ══════════════════════════════
+           MODALES
+        ══════════════════════════════ */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: flex-end; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity .2s; }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal { background: var(--dark2); border-radius: 24px 24px 0 0; border-top: 1px solid rgba(201,168,76,.15); padding: 24px 20px 44px; width: 100%; max-width: 480px; transform: translateY(100%); transition: transform .35s cubic-bezier(.16,1,.3,1); max-height: 90vh; overflow-y: auto; }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        .modal-handle { width: 40px; height: 4px; background: rgba(var(--ink),.1); border-radius: 2px; margin: 0 auto 20px; }
+        .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; color: var(--white); margin-bottom: 4px; }
+        .modal-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+        /* ══════════════════════════════
+           TOAST
+        ══════════════════════════════ */
+        .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--dark2); color: var(--white); border: 1px solid rgba(var(--ink),.1); padding: 12px 20px; border-radius: 100px; font-size: 13px; font-weight: 600; z-index: 300; transition: transform .3s; white-space: nowrap; box-shadow: var(--shadow); }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+        .toast.success { background: var(--green-light); border-color: rgba(47,158,68,.4); color: var(--green-text); }
+        .toast.error { background: var(--red-light); border-color: rgba(224,49,49,.4); color: var(--red-text); }
+
+        /* ══════════════════════════════
+           MOBILE (≤ 768px): vuelve al layout original centrado
+        ══════════════════════════════ */
+        @media (max-width: 768px) {
+            .desktop-layout { display: none !important; }
+            .desktop-layout.visible { display: none !important; }
+
+            /* En mobile mostramos el wrapper mobile */
+            .mobile-app-wrapper.visible { display: block !important; }
+
+            .sidebar { display: none; }
+            .content-grid { grid-template-columns: 1fr; }
+            .content-side { display: none; }
+            .quick-grid { grid-template-columns: repeat(4,1fr); gap: 8px; }
+            .quick-icon { width: 38px !important; height: 38px !important; font-size: 17px !important; }
+            .quick-label { font-size: 9px !important; }
+            .balance-amount { font-size: 38px !important; }
+        }
+
+        /* MOBILE APP wrapper (igual que el original) */
+        .mobile-app-wrapper {
+            display: none;
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+
+        /* header mobile */
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0 16px; }
+        .header-greeting { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; color: var(--white); }
+        .header-sub { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: 'Space Mono', monospace; }
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        .avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,var(--gold-dark),var(--gold)); display: flex; align-items: center; justify-content: center; color: var(--on-gold); font-size: 15px; font-weight: 800; cursor: pointer; border: 2px solid transparent; transition: border-color .15s; }
+        .avatar:hover { border-color: var(--gold-light); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: var(--dark); }
+        ::-webkit-scrollbar-thumb { background: rgba(201,168,76,.3); border-radius: 2px; }
+
+        /* ══════════════════════════════
+           RESPONSIVE DESKTOP → TABLET (769–1100px)
+        ══════════════════════════════ */
+        @media (min-width: 769px) and (max-width: 1100px) {
+            :root { --sidebar-w: 220px; }
+            .content-grid { grid-template-columns: 1fr; }
+            .content-side { display: none; }
+            .content-scroll { padding: 20px; }
+            .balance-amount { font-size: 44px !important; }
+        }
+
+        /* ══════════════════════════════
+           ADMIN dentro del desktop layout
+        ══════════════════════════════ */
+        #admin-content-panel { display: none; }
+        #admin-content-panel.active { display: block; }
+        #main-content-panel { display: block; }
+        #main-content-panel.hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div class="auth-screen visible" id="auth-screen">
+    <button class="icon-btn theme-fab" onclick="alternarTema()" title="Cambiar tema" aria-label="Cambiar tema"><i class="ti theme-icon"></i></button>
+    <div class="auth-inner">
+        <div class="auth-logo">
+            <span class="logo-motoserra">🐍</span>
+            <h1>BANCO LA COBRA</h1>
+            <p>Tus pesos, tu decisión</p>
+        </div>
+        <div class="auth-card">
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchTab('login')">Ingresar</button>
+                <button class="auth-tab" onclick="switchTab('registro')">Registrarse</button>
+            </div>
+            <div class="auth-form active" id="form-login">
+                <div class="field"><label>DNI</label><input type="text" id="login-dni" placeholder="Ej: 35123456" maxlength="20"></div>
+                <div class="field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="••••••••"></div>
+                <p class="msg-error" id="login-error"></p>
+                <button class="btn-primary" id="btn-login" onclick="login()">⚡ INGRESAR</button>
+            </div>
+            <div class="auth-form" id="form-registro">
+                <div class="verify-step active" id="reg-step-1">
+                    <div class="field"><label>Nombre</label><input type="text" id="reg-nombre" placeholder="Tu nombre"></div>
+                    <div class="field"><label>Apellido</label><input type="text" id="reg-apellido" placeholder="Tu apellido"></div>
+                    <div class="field"><label>DNI</label><input type="text" id="reg-dni" placeholder="Sin puntos" maxlength="20"></div>
+                    <div class="field">
+                        <label>Email</label>
+                        <div style="display:flex;gap:8px">
+                            <input type="email" id="reg-email" placeholder="tu@gmail.com" style="flex:1">
+                            <button class="btn-send-code" id="btn-enviar-codigo" onclick="enviarCodigoRegistro()">Enviar código</button>
+                        </div>
+                        <p class="input-hint" id="reg-email-hint"></p>
+                    </div>
+                    <div class="field"><label>Contraseña</label><input type="password" id="reg-pass" placeholder="Mínimo 6 caracteres"><p class="input-hint">Mínimo 6 caracteres.</p></div>
+                </div>
+                <div class="verify-step" id="reg-step-2">
+                    <div style="text-align:center;margin-bottom:16px">
+                        <div style="font-size:32px;margin-bottom:8px">📧</div>
+                        <p style="font-size:14px;color:var(--white);font-weight:600">Verificá tu email</p>
+                        <p style="font-size:12px;color:var(--muted);margin-top:4px" id="reg-email-display"></p>
+                    </div>
+                    <div class="field">
+                        <label>Código de 6 dígitos</label>
+                        <input type="text" id="reg-codigo" placeholder="000000" maxlength="6" style="text-align:center;font-size:24px;font-family:'Space Mono',monospace;letter-spacing:6px;font-weight:700">
+                    </div>
+                    <p class="msg-error" id="reg-error"></p>
+                    <p class="msg-success" id="reg-success"></p>
+                    <button class="btn-primary" id="btn-registro" onclick="registro()">🐍 CREAR MI CUENTA</button>
+                    <button class="btn-secondary" onclick="volverRegStep1()">← Volver</button>
+                </div>
+            </div>
+        </div>
+        <div class="admin-link"><a onclick="mostrarAdminLogin()"><i class="ti ti-shield-lock"></i> Acceso Administrador</a></div>
+    </div>
+</div>
+
+<!-- ADMIN LOGIN -->
+<div class="admin-login-screen" id="admin-login-screen">
+    <button class="icon-btn theme-fab" onclick="alternarTema()" title="Cambiar tema" aria-label="Cambiar tema"><i class="ti theme-icon"></i></button>
+    <div class="auth-inner">
+        <div class="auth-logo">
+            <span class="logo-motoserra">🛡️</span>
+            <h1>PANEL ADMIN</h1>
+            <p>Acceso restringido · Solo personal autorizado</p>
+        </div>
+        <div class="auth-card">
+            <div class="field"><label>Usuario Admin</label><input type="text" id="admin-user" placeholder="admin"></div>
+            <div class="field"><label>Contraseña</label><input type="password" id="admin-pass" placeholder="••••••••"></div>
+            <p class="msg-error" id="admin-error"></p>
+            <button class="btn-primary" id="btn-admin-login" onclick="loginAdmin()">🔑 INGRESAR AL PANEL</button>
+            <button class="btn-secondary" onclick="volverAuth()">← Volver al banco</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     DESKTOP LAYOUT (sidebar + contenido)
+     Visible en ≥769px
+════════════════════════════════════════════════ -->
+<div class="desktop-layout" id="desktop-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <span class="sidebar-logo-icon">🐍</span>
+            <div class="sidebar-logo-text">
+                <h2>LA COBRA</h2>
+                <span>Banco Digital</span>
+            </div>
+        </div>
+
+        <div id="sidebar-balance-block" style="display:none">
+            <div style="padding:12px 12px 0">
+                <div class="sidebar-balance">
+                    <div class="sidebar-balance-label">Saldo disponible</div>
+                    <div class="sidebar-balance-amount"><span>$</span> <span id="sb-saldo">0</span></div>
+                    <div class="sidebar-balance-alias" id="sb-alias">-</div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-section-label">Principal</div>
+            <div class="sidebar-item active" id="nav-inicio" onclick="showSection('inicio')">
+                <i class="ti ti-home"></i>
+                <span class="item-label">Inicio</span>
+            </div>
+            <div class="sidebar-item" id="nav-actividad" onclick="showSection('actividad')">
+                <i class="ti ti-activity"></i>
+                <span class="item-label">Actividad</span>
+            </div>
+
+            <div class="sidebar-section-label" style="margin-top:8px">Operaciones</div>
+            <div class="sidebar-item" onclick="abrirModalEnviar()">
+                <i class="ti ti-arrow-up-right"></i>
+                <span class="item-label">Transferir</span>
+            </div>
+            <div class="sidebar-item" onclick="abrirModalRecibir()">
+                <i class="ti ti-arrow-down-left"></i>
+                <span class="item-label">Recibir</span>
+            </div>
+            <div class="sidebar-item" onclick="abrirModal('modal-cargar')">
+                <i class="ti ti-plus"></i>
+                <span class="item-label">Ingresar dinero</span>
+            </div>
+            <div class="sidebar-item" onclick="abrirModal('modal-pagar')">
+                <i class="ti ti-bolt"></i>
+                <span class="item-label">Servicios</span>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-user" onclick="abrirPerfil()">
+                <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+                <div class="sidebar-user-info">
+                    <div class="sidebar-user-name" id="sidebar-username">Cargando...</div>
+                    <div class="sidebar-user-role">Caja de Ahorro · ARS</div>
+                </div>
+                <button class="sidebar-logout" onclick="event.stopPropagation();logout()" title="Cerrar sesión">
+                    <i class="ti ti-logout"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="main-content">
+        <!-- TOPBAR -->
+        <div class="topbar">
+            <div>
+                <div class="topbar-greeting" id="topbar-greeting">BANCO LA COBRA</div>
+                <div class="topbar-sub">BANCO LA COBRA</div>
+            </div>
+            <div class="topbar-right">
+                <button class="icon-btn" onclick="alternarTema()" title="Cambiar tema" aria-label="Cambiar tema"><i class="ti theme-icon"></i></button>
+                <button class="icon-btn" onclick="actualizarPantalla()" title="Actualizar"><i class="ti ti-refresh"></i></button>
+            </div>
+        </div>
+
+        <!-- LOADING -->
+        <div class="loading-screen" id="desktop-loading">
+            <div class="spinner"></div>
+            <span>Cargando tu billetera...</span>
+        </div>
+
+        <!-- CONTENIDO SCROLL -->
+        <div class="content-scroll" id="desktop-content" style="display:none">
+
+            <!-- PANEL PRINCIPAL (inicio) -->
+            <div id="main-content-panel">
+                <div class="content-grid">
+                    <!-- Columna izquierda -->
+                    <div class="content-main">
+                        <!-- Balance -->
+                        <div class="balance-card">
+                            <div class="balance-card-top">
+                                <div class="balance-card-left">
+                                    <div class="balance-tag">💰 CAJA DE AHORRO · <span id="dc-moneda">ARS</span></div>
+                                    <div class="balance-amount"><span id="dc-simbolo">$</span> <span id="dc-saldo">0,00</span></div>
+                                    <div class="balance-alias" id="dc-alias">-</div>
+                                </div>
+                                <div class="mon-switch" id="moneda-switch" style="display:none"></div>
+                            </div>
+                            <div class="balance-actions">
+                                <button class="bal-btn" onclick="abrirModalEnviar()"><i class="ti ti-arrow-up-right"></i> ENVIAR</button>
+                                <button class="bal-btn" onclick="abrirModalRecibir()"><i class="ti ti-arrow-down-left"></i> RECIBIR</button>
+                            </div>
+                        </div>
+
+                        <div class="tarjeta-wrap tarjeta-slot tarjeta-narrow"></div>
+
+                        <!-- Acciones rápidas -->
+                        <div class="section-label">Acciones rápidas</div>
+                        <div class="quick-grid">
+                            <div class="quick-item" onclick="abrirModal('modal-pagar')">
+                                <div class="quick-icon" style="background:linear-gradient(135deg,#1D9E75,#20c997)"><i class="ti ti-bolt"></i></div>
+                                <span class="quick-label">Servicios</span>
+                            </div>
+                            <div class="quick-item" onclick="abrirModal('modal-cargar')">
+                                <div class="quick-icon" style="background:linear-gradient(135deg,var(--gold-dark),var(--gold))"><i class="ti ti-plus"></i></div>
+                                <span class="quick-label">Cargar</span>
+                            </div>
+                        </div>
+
+                        <!-- Historial -->
+                        <div class="history-card">
+                            <div class="history-header">
+                                <h3>Últimas actividades</h3>
+                                <button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button>
+                            </div>
+                            <div id="historial-container"><p class="tx-empty">🐍 Cargando actividad...</p></div>
+                        </div>
+                    </div>
+
+                    <!-- Columna derecha (info de cuenta) -->
+                    <div class="content-side">
+                        <div class="tarjeta-wrap tarjeta-slot"></div>
+                        <!-- Datos de cuenta -->
+                        <div class="side-card">
+                            <div class="side-card-header">
+                                <div class="side-card-title">Datos de tu cuenta</div>
+                            </div>
+                            <div class="side-card-body">
+                                <div class="info-row">
+                                    <span class="info-label">Alias</span>
+                                    <span class="info-value" id="side-alias">-
+                                        <button class="copy-mini" onclick="copiarTexto(datosUsuario?.alias,'Alias copiado ✓')" title="Copiar alias"><i class="ti ti-copy"></i></button>
+                                    </span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">CBU</span>
+                                    <span class="info-value" style="font-size:10px;font-family:'Space Mono',monospace;flex-direction:column;align-items:flex-end;gap:4px">
+                                        <span id="side-cbu" style="word-break:break-all;text-align:right">-</span>
+                                        <button class="copy-mini" onclick="copiarTexto(datosUsuario?.cbu,'CBU copiado ✓')" title="Copiar CBU"><i class="ti ti-copy"></i></button>
+                                    </span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Moneda</span>
+                                    <span class="info-value" id="side-moneda">ARS</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Titular</span>
+                                    <span class="info-value" id="side-titular">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cajas de ahorro (ARS + USD) -->
+                        <div class="side-card">
+                            <div class="side-card-header">
+                                <div class="side-card-title">Mis cajas de ahorro</div>
+                            </div>
+                            <div class="side-card-body" id="side-cuentas">-</div>
+                        </div>
+
+                        <!-- Stats rápidas -->
+                        <div class="side-card">
+                            <div class="side-card-header">
+                                <div class="side-card-title">Resumen</div>
+                            </div>
+                            <div class="side-card-body">
+                                <div class="stat-chips">
+                                    <div class="stat-chip">
+                                        <div class="stat-chip-label">Ingresos</div>
+                                        <div class="stat-chip-value" id="stat-ingresos" style="font-size:16px;color:var(--green-text)">$0</div>
+                                    </div>
+                                    <div class="stat-chip">
+                                        <div class="stat-chip-label">Egresos</div>
+                                        <div class="stat-chip-value" id="stat-egresos" style="font-size:16px;color:var(--red-text)">$0</div>
+                                    </div>
+                                    <div class="stat-chip" style="grid-column:span 2">
+                                        <div class="stat-chip-label">Movimientos</div>
+                                        <div class="stat-chip-value" id="stat-movs">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADMIN PANEL dentro del desktop -->
+            <div id="admin-content-panel">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--gold)">🛡️ PANEL ADMIN</div>
+                        <div style="font-size:10px;color:var(--muted);font-family:'Space Mono',monospace">BANCO LA COBRA · CONTROL TOTAL</div>
+                    </div>
+                    <button class="btn-secondary" style="width:auto;padding:8px 16px" onclick="salirAdmin()">← Volver al banco</button>
+                </div>
+                <div class="admin-tabs">
+                    <button class="admin-tab active" onclick="switchAdminTab('usuarios')">Usuarios</button>
+                    <button class="admin-tab" onclick="switchAdminTab('movimientos')">Movimientos</button>
+                    <button class="admin-tab" onclick="switchAdminTab('central')">Central</button>
+                    <button class="admin-tab" onclick="switchAdminTab('deudores')">Deudores</button>
+                </div>
+                <div class="admin-panel active" id="panel-usuarios">
+                    <div class="stat-grid" id="admin-stats"></div>
+                    <div class="table-card"><div class="table-scroll"><table><thead><tr><th>ID</th><th>Nombre</th><th>DNI</th><th>Alias</th><th>Saldo</th><th>Estado</th><th></th></tr></thead><tbody id="tabla-usuarios"></tbody></table></div></div>
+                </div>
+                <div class="admin-panel" id="panel-movimientos">
+                    <div class="table-card"><div class="table-scroll"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Tipo</th><th>Monto</th><th>Detalle</th></tr></thead><tbody id="tabla-movimientos"></tbody></table></div></div>
+                </div>
+                <div class="admin-panel" id="panel-central">
+                    <div class="table-card" style="margin-bottom:12px;padding:14px">
+                        <div class="side-card-title" style="margin-bottom:10px">Datos de mi banco</div>
+                        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                            <div class="field" style="flex:1;min-width:200px;margin-bottom:0"><label>Nombre actual: <strong id="banco-nombre-actual" style="color:var(--gold)">-</strong></label><input type="text" id="banco-nombre-nuevo" placeholder="Nuevo nombre del banco"></div>
+                            <button class="btn-send-code" onclick="renombrarBanco()">Cambiar nombre</button>
+                        </div>
+                        <p class="msg-error" id="banco-nombre-error" style="margin-top:8px"></p>
+                    </div>
+                    <div class="table-card" style="margin-bottom:12px"><div class="table-scroll"><table><thead><tr><th>Código</th><th>Nombre</th><th>Ambiente</th></tr></thead><tbody id="tabla-bancos"></tbody></table></div></div>
+                    <div class="table-card"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 14px 10px;border-bottom:1px solid rgba(var(--ink),0.06)"><span style="font-size:13px;font-weight:700">Transacciones interbancarias</span><button onclick="cargarCentral()" style="font-size:11px;color:var(--gold);background:none;border:none;cursor:pointer;font-family:'Space Mono',monospace">↻ ACTUALIZAR</button></div><div class="table-scroll"><table><thead><tr><th>Estado</th><th>Origen</th><th>Destino</th><th>Importe</th><th>Fecha</th></tr></thead><tbody id="tabla-central"></tbody></table></div></div>
+                </div>
+                <div class="admin-panel" id="panel-deudores">
+                    <div class="table-card" style="margin-bottom:12px;padding:14px">
+                        <div class="side-card-title" style="margin-bottom:10px">Informar o actualizar una deuda</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                            <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>DNI</label><input type="text" id="deuda-dni" placeholder="30123456" maxlength="8"></div>
+                            <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Monto</label><input type="number" id="deuda-monto" placeholder="$ 0,00" min="0"></div>
+                            <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>Situación (1-5)</label><select id="deuda-situacion"><option value="1">1 · Normal</option><option value="2">2 · Riesgo bajo</option><option value="3">3 · Riesgo medio</option><option value="4">4 · Riesgo alto</option><option value="5">5 · Irrecuperable</option></select></div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:10px">
+                            <button class="btn-send-code" onclick="consultarDeudorAdmin()">Consultar DNI</button>
+                            <button class="btn-primary" style="width:auto;margin-top:0" onclick="informarDeuda()">Informar deuda</button>
+                        </div>
+                        <p class="msg-error" id="deuda-error" style="margin-top:8px"></p>
+                        <p class="msg-success" id="deuda-success" style="margin-top:8px"></p>
+                    </div>
+                    <div class="table-card"><div class="table-scroll"><table><thead><tr><th>DNI</th><th>Cliente</th><th>Monto</th><th>Situación</th><th>Fecha</th></tr></thead><tbody id="tabla-deudores"></tbody></table></div></div>
+                </div>
+            </div>
+
+        </div><!-- /content-scroll -->
+    </div><!-- /main-content -->
+</div><!-- /desktop-layout -->
+
+<!-- ══════════════════════════════════════════════
+     MOBILE APP WRAPPER (≤768px)
+     Layout original compacto, centrado
+════════════════════════════════════════════════ -->
+<div style="display:flex;justify-content:center;padding:0 0 60px">
+    <div class="mobile-app-wrapper" id="mobile-app-wrapper">
+        <div class="loading-screen" id="mobile-loading"><div class="spinner"></div><span>Cargando tu billetera...</span></div>
+        <div id="mobile-app-content" style="display:none"></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     OVERLAYS COMPARTIDOS
+════════════════════════════════════════════════ -->
+
+<!-- PERFIL -->
+<div class="profile-overlay" id="profile-overlay">
+    <div class="profile-panel">
+        <div class="profile-handle"></div>
+        <div class="profile-avatar-wrap">
+            <div class="profile-avatar-big" id="profile-avatar-big"></div>
+            <button class="avatar-edit" onclick="document.getElementById('foto-input').click()" title="Cambiar foto" aria-label="Cambiar foto"><i class="ti ti-camera"></i></button>
+        </div>
+        <input type="file" id="foto-input" accept="image/png,image/jpeg,image/webp" hidden onchange="subirFoto(this)">
+        <div class="profile-name" id="profile-name"></div>
+        <div class="profile-email" id="profile-email"></div>
+        <div class="foto-actions">
+            <button onclick="document.getElementById('foto-input').click()"><i class="ti ti-photo-up"></i> <span id="foto-btn-label">Subir foto</span></button>
+            <button class="danger" id="btn-quitar-foto" onclick="quitarFoto()" style="display:none"><i class="ti ti-trash"></i> Quitar</button>
+        </div>
+        <p class="msg-error" id="foto-error" style="margin:-6px 0 14px"></p>
+        <div class="theme-row">
+            <span class="theme-row-label"><i class="ti ti-palette"></i> Apariencia</span>
+            <div class="mon-switch">
+                <button class="mon-pill" data-tema="dark" onclick="aplicarTema('dark')"><i class="ti ti-moon"></i> Oscuro</button>
+                <button class="mon-pill" data-tema="light" onclick="aplicarTema('light')"><i class="ti ti-sun"></i> Claro</button>
+            </div>
+        </div>
+        <div class="profile-data" id="profile-data"></div>
+        <div class="change-pass-section" id="change-alias-section">
+            <h4>Cambiar alias</h4>
+            <div class="field" id="alias-moneda-field" style="display:none"><label>Caja</label><div class="mon-switch" id="alias-moneda-switch"></div></div>
+            <div class="field"><label>Nuevo alias</label><input type="text" id="nuevo-alias" placeholder="nombre.apellido.boe" maxlength="50"></div>
+            <p class="input-hint">Solo letras, números, puntos y guiones. Tiene que ser único en todo el sistema bancario.</p>
+            <p class="msg-error" id="alias-error"></p>
+            <p class="msg-success" id="alias-success"></p>
+            <button class="btn-primary" onclick="cambiarAlias()">Actualizar alias</button>
+        </div>
+        <div class="change-pass-section">
+            <h4>Cambiar contraseña</h4>
+            <div class="verify-step active" id="pass-step-1">
+                <div class="field"><label>Contraseña actual</label><input type="password" id="pass-actual" placeholder="••••••••"></div>
+                <div class="field"><label>Nueva contraseña</label><input type="password" id="pass-nueva" placeholder="••••••••"></div>
+                <div class="field"><label>Confirmar nueva</label><input type="password" id="pass-confirm" placeholder="••••••••"></div>
+                <p class="msg-error" id="pass-error-1"></p>
+                <button class="btn-primary" onclick="solicitarCodigoPassword()">Enviar código de verificación</button>
+            </div>
+            <div class="verify-step" id="pass-step-2">
+                <div style="text-align:center;margin-bottom:14px">
+                    <div style="font-size:28px;margin-bottom:6px">📧</div>
+                    <p style="font-size:13px;color:var(--white);font-weight:600">Verificá tu identidad</p>
+                    <p style="font-size:12px;color:var(--muted);margin-top:4px">Enviamos un código a tu email</p>
+                </div>
+                <div class="field"><label>Código de verificación</label><input type="text" id="pass-codigo" placeholder="000000" maxlength="6" style="text-align:center;font-size:22px;font-family:'Space Mono',monospace;letter-spacing:6px;font-weight:700"></div>
+                <p class="msg-error" id="pass-error"></p>
+                <p class="msg-success" id="pass-success"></p>
+                <button class="btn-primary" onclick="cambiarPassword()">Confirmar cambio</button>
+                <button class="btn-secondary" onclick="volverPassStep1()">← Volver</button>
+            </div>
+        </div>
+        <button class="btn-secondary" onclick="cerrarPerfil()">Cerrar</button>
+        <button class="btn-secondary" style="border-color:rgba(224,49,49,.3);color:var(--red-text);margin-top:4px" onclick="logout()"><i class="ti ti-logout"></i> Cerrar sesión</button>
+    </div>
+</div>
+
+<!-- COMPROBANTE -->
+<div class="comprobante-overlay" id="comprobante-overlay">
+    <div class="comprobante-box" id="comprobante-box">
+        <div class="comprobante-header">
+            <div class="comprobante-icon">✅</div>
+            <div class="comprobante-titulo">COMPROBANTE</div>
+            <div class="comprobante-subtitulo" id="comp-subtitulo">BANCO LA COBRA</div>
+        </div>
+        <div class="comprobante-monto"><span>$</span> <span id="comp-monto">0</span></div>
+        <div class="comprobante-datos" id="comp-datos"></div>
+        <div class="comprobante-btns">
+            <button class="btn-primary" onclick="descargarComprobante()">⬇ DESCARGAR</button>
+            <button class="btn-secondary" onclick="cerrarComprobante()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<!-- CHATBOT -->
+<button class="chat-fab" id="chat-fab" onclick="chatAlternar()" aria-label="Abrir chat con Cobrita"><i class="ti ti-message-chatbot"></i><span class="chat-dot" id="chat-dot"></span></button>
+<div class="chat-panel" id="chat-panel" role="dialog" aria-label="Cobrita">
+    <div class="chat-head">
+        <div class="chat-head-av">🐍</div>
+        <div class="chat-head-t"><b>COBRITA</b><span>Tu asistente de La Cobra</span></div>
+        <button class="chat-close" onclick="chatAlternar(false)" aria-label="Cerrar"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="chat-msgs" id="chat-msgs"></div>
+    <div class="chat-chips" id="chat-chips"></div>
+    <input type="range" class="chat-chips-bar" id="chat-chips-bar" min="0" max="100" value="0" step="0.5" aria-label="Desplazar preguntas sugeridas">
+    <form class="chat-form" onsubmit="chatEnviar(event)">
+        <input type="text" id="chat-input" placeholder="Escribí tu consulta..." autocomplete="off" maxlength="200">
+        <button type="submit" aria-label="Enviar"><i class="ti ti-send"></i></button>
+    </form>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- MODAL ENVIAR -->
+<div class="modal-overlay" id="modal-enviar">
+    <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">TRANSFERIR</div>
+        <p class="modal-subtitle">Por alias (mismo banco) o por CBU (cualquier banco)</p>
+        <div class="field" id="enviar-moneda-field" style="display:none"><label>Transferir desde</label><div class="mon-switch" id="enviar-moneda-switch"></div></div>
+        <div class="field"><label>Alias destino</label><input type="text" id="enviar-alias" placeholder="juan.perez.boe"></div>
+        <div style="text-align:center;font-size:10px;color:var(--muted);margin:-4px 0 8px;font-family:'Space Mono',monospace;letter-spacing:1px">— O —</div>
+        <div class="field"><label>CBU destino (interbancaria)</label><input type="text" id="enviar-cbu" placeholder="22 dígitos" maxlength="22"></div>
+        <div id="enviar-destinatario" style="display:none;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:var(--radius-sm);padding:10px 12px;margin:-4px 0 12px;font-size:12px"></div>
+        <div class="field"><label>Monto</label><input type="number" id="enviar-monto" placeholder="$ 0,00" min="1"></div>
+        <div class="field"><label>Descripción (opcional)</label><textarea id="enviar-desc" placeholder="Ej: Pago alquiler enero..."></textarea></div>
+        <p class="msg-error" id="enviar-error"></p>
+        <button class="btn-primary" id="btn-confirmar-envio" onclick="confirmarEnvio()">⚡ CONFIRMAR</button>
+        <button class="btn-secondary" onclick="cerrarModal('modal-enviar')">Cancelar</button>
+    </div>
+</div>
+
+<!-- MODAL RECIBIR -->
+<div class="modal-overlay" id="modal-recibir">
+    <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">RECIBIR</div>
+        <p class="modal-subtitle">Compartí tus datos para recibir transferencias</p>
+        <div style="background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.15);border-radius:var(--radius-sm);padding:18px;text-align:center;margin-bottom:14px">
+            <p style="font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">TU ALIAS</p>
+            <p style="font-size:20px;font-weight:700;color:var(--gold);font-family:'Space Mono',monospace" id="recibir-alias">-</p>
+            <p style="font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:2px;margin-top:14px;margin-bottom:6px">CBU</p>
+            <p style="font-size:11px;font-weight:600;color:var(--white);word-break:break-all;font-family:'Space Mono',monospace" id="recibir-cbu">-</p>
+        </div>
+        <button class="btn-primary" onclick="copiarAlias()"><i class="ti ti-copy"></i> COPIAR ALIAS</button>
+        <button class="btn-secondary" onclick="copiarCBU()"><i class="ti ti-copy"></i> Copiar CBU</button>
+        <button class="btn-secondary" onclick="cerrarModal('modal-recibir')">Cerrar</button>
+    </div>
+</div>
+
+<!-- MODAL CARGAR -->
+<div class="modal-overlay" id="modal-cargar">
+    <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">INGRESAR DINERO</div>
+        <p class="modal-subtitle">Cargá saldo en tu cuenta</p>
+        <div class="field" id="cargar-moneda-field" style="display:none"><label>Moneda</label><div class="mon-switch" id="cargar-moneda-switch"></div></div>
+        <div class="field"><label>Monto</label><input type="number" id="cargar-monto" placeholder="$ 0,00" min="1"></div>
+        <div class="field"><label>Descripción (opcional)</label><textarea id="cargar-desc" placeholder="Ej: Depósito en efectivo..."></textarea></div>
+        <p class="msg-error" id="cargar-error"></p>
+        <button class="btn-primary" id="btn-confirmar-carga" onclick="confirmarCarga()">⚡ ACREDITAR</button>
+        <button class="btn-secondary" onclick="cerrarModal('modal-cargar')">Cancelar</button>
+    </div>
+</div>
+
+<!-- MODAL PAGAR -->
+<div class="modal-overlay" id="modal-pagar">
+    <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">PAGAR SERVICIO</div>
+        <p class="modal-subtitle">Aboná tus servicios desde acá</p>
+        <div class="field"><label>Servicio</label><select id="pagar-servicio"><option>Electricidad (EPEC)</option><option>Gas (Naturgy)</option><option>Agua (AYSAM)</option><option>Internet (Telecentro)</option><option>Telefonía móvil</option></select></div>
+        <div class="field"><label>Monto</label><input type="number" id="pagar-monto" placeholder="$ 0,00" min="1"></div>
+        <div class="field"><label>Descripción (opcional)</label><textarea id="pagar-desc" placeholder="Ej: Factura noviembre..."></textarea></div>
+        <p class="msg-error" id="pagar-error"></p>
+        <button class="btn-primary" id="btn-confirmar-pago" onclick="confirmarPago()">⚡ PAGAR</button>
+        <button class="btn-secondary" onclick="cerrarModal('modal-pagar')">Cancelar</button>
+    </div>
+</div>
+
+<script>
+// Usa la misma dirección desde la que se abrió la página (sirve desde la PC y desde el celular)
+const BASE_URL = location.protocol.startsWith('http') ? location.origin : 'http://localhost:3000';
+let usuarioId = null, datosUsuario = null, filtroActivo = 'todos';
+let comprobanteActual = null;
+let esDesktop = () => window.innerWidth > 768;
+
+function fmt(n) { return new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n); }
+function fmtCorto(n) {
+    if (Math.abs(n) >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'K';
+    return '$' + fmt(n);
+}
+function toast(msg, tipo='') { const t=document.getElementById('toast'); t.textContent=msg; t.className=`toast ${tipo} show`; setTimeout(()=>{t.className='toast';},3200); }
+function abrirModal(id) {
+    document.getElementById(id).classList.add('active');
+    if (id === 'modal-cargar') inicializarSelectorMoneda('cargar');
+}
+function cerrarModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e=>{ if(e.target===o) o.classList.remove('active'); }));
+
+// ══ TEMA (claro / oscuro) ══
+function temaActual() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+function iconoTema() { return temaActual() === 'light' ? 'ti-moon' : 'ti-sun'; } // el ícono muestra a qué tema se va a cambiar
+function aplicarTema(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('cobra-tema', t); } catch (e) {}
+    document.querySelectorAll('.theme-icon').forEach(i => { i.classList.remove('ti-moon','ti-sun'); i.classList.add(iconoTema()); });
+    document.querySelectorAll('[data-tema]').forEach(b => b.classList.toggle('active', b.dataset.tema === t));
+}
+function alternarTema() { aplicarTema(temaActual() === 'light' ? 'dark' : 'light'); }
+aplicarTema(temaActual());
+
+// ══ FOTO DE PERFIL ══
+function pintarAvatar(el, foto, inicial) {
+    if (!el) return;
+    if (foto) { el.style.backgroundImage = `url('${foto}')`; el.classList.add('has-photo'); }
+    else { el.style.backgroundImage = ''; el.classList.remove('has-photo'); }
+    el.textContent = inicial;
+}
+function pintarAvatares() {
+    if (!datosUsuario) return;
+    const ini = datosUsuario.nombre.charAt(0).toUpperCase();
+    pintarAvatar(document.getElementById('sidebar-avatar'), datosUsuario.foto, ini);
+    pintarAvatar(document.getElementById('profile-avatar-big'), datosUsuario.foto, ini);
+    document.querySelectorAll('.avatar').forEach(a => pintarAvatar(a, datosUsuario.foto, ini));
+    const tiene = !!datosUsuario.foto;
+    document.getElementById('btn-quitar-foto').style.display = tiene ? '' : 'none';
+    document.getElementById('foto-btn-label').textContent = tiene ? 'Cambiar foto' : 'Subir foto';
+}
+function errorFoto(msg) { const e = document.getElementById('foto-error'); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
+
+// Recorta al centro y reduce a 256×256 para que el archivo sea liviano
+function reducirImagen(file) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            const lado = Math.min(img.width, img.height), T = 256;
+            const c = document.createElement('canvas'); c.width = c.height = T;
+            c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, T, T);
+            URL.revokeObjectURL(url);
+            resolve(c.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+        img.src = url;
+    });
+}
+
+async function subirFoto(input) {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file || !usuarioId) return;
+    errorFoto('');
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { errorFoto('Elegí una imagen PNG, JPG o WEBP.'); return; }
+    if (file.size > 10 * 1024 * 1024) { errorFoto('La imagen pesa demasiado (máximo 10 MB).'); return; }
+    try {
+        const foto = await reducirImagen(file);
+        const res = await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/foto`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ foto }) });
+        const data = await res.json();
+        if (!res.ok) { errorFoto(data.error || 'No se pudo guardar la foto.'); return; }
+        datosUsuario.foto = foto;
+        pintarAvatares();
+        toast('Foto actualizada', 'success');
+    } catch (e) { errorFoto(e.message || 'Error de conexión.'); }
+}
+
+async function quitarFoto() {
+    if (!usuarioId) return;
+    errorFoto('');
+    try {
+        const res = await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/foto`, { method: 'DELETE' });
+        if (!res.ok) { const d = await res.json().catch(()=>({})); errorFoto(d.error || 'No se pudo quitar la foto.'); return; }
+        datosUsuario.foto = null;
+        pintarAvatares();
+        toast('Foto eliminada', 'success');
+    } catch { errorFoto('Error de conexión.'); }
+}
+
+// ══ AUTH ══
+function switchTab(tab) {
+    document.querySelectorAll('.auth-tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&tab==='login')||(i===1&&tab==='registro')));
+    document.getElementById('form-login').classList.toggle('active',tab==='login');
+    document.getElementById('form-registro').classList.toggle('active',tab==='registro');
+}
+
+async function login() {
+    const dni=document.getElementById('login-dni').value.trim();
+    const password=document.getElementById('login-pass').value;
+    const errorEl=document.getElementById('login-error');
+    const btn=document.getElementById('btn-login');
+    errorEl.style.display='none';
+    if (!dni||!password) { errorEl.textContent='Completá DNI y contraseña.'; errorEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Verificando...';
+    try {
+        const res=await fetch(`${BASE_URL}/api/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dni,password})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error al iniciar sesión.'; errorEl.style.display='block'; return; }
+        usuarioId=data.usuario.id;
+        mostrarApp();
+    } catch { errorEl.textContent='Error de conexión con el servidor.'; errorEl.style.display='block'; }
+    finally { btn.disabled=false; btn.textContent='⚡ INGRESAR'; }
+}
+
+async function enviarCodigoRegistro() {
+    const email=document.getElementById('reg-email').value.trim();
+    const btn=document.getElementById('btn-enviar-codigo');
+    const hint=document.getElementById('reg-email-hint');
+    if (!email||!email.includes('@')) { hint.textContent='Ingresá un email válido.'; hint.style.color='var(--red-text)'; return; }
+    btn.disabled=true; btn.textContent='Enviando...';
+    try {
+        const res=await fetch(`${BASE_URL}/api/verificacion/enviar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,tipo:'registro'})});
+        const data=await res.json();
+        if (!res.ok) { hint.textContent=data.error||'Error.'; hint.style.color='var(--red-text)'; btn.disabled=false; btn.textContent='Enviar código'; return; }
+        hint.textContent='✓ Código enviado. Revisá tu bandeja de entrada.'; hint.style.color='var(--green-text)';
+        document.getElementById('reg-email-display').textContent=email;
+        document.getElementById('reg-step-1').classList.remove('active');
+        document.getElementById('reg-step-2').classList.add('active');
+        let s=60;
+        const timer=setInterval(()=>{ s--; btn.textContent=`Reenviar (${s}s)`; if(s<=0){clearInterval(timer);btn.disabled=false;btn.textContent='Enviar código';} },1000);
+    } catch { hint.textContent='Error de conexión.'; hint.style.color='var(--red-text)'; btn.disabled=false; btn.textContent='Enviar código'; }
+}
+
+function volverRegStep1() {
+    document.getElementById('reg-step-2').classList.remove('active');
+    document.getElementById('reg-step-1').classList.add('active');
+}
+
+async function registro() {
+    const nombre=document.getElementById('reg-nombre').value.trim();
+    const apellido=document.getElementById('reg-apellido').value.trim();
+    const dni=document.getElementById('reg-dni').value.trim();
+    const email=document.getElementById('reg-email').value.trim();
+    const password=document.getElementById('reg-pass').value;
+    const codigo=document.getElementById('reg-codigo').value.trim();
+    const errorEl=document.getElementById('reg-error');
+    const successEl=document.getElementById('reg-success');
+    const btn=document.getElementById('btn-registro');
+    errorEl.style.display='none'; successEl.style.display='none';
+    if (!nombre||!apellido||!dni||!password||!codigo) { errorEl.textContent='Completá todos los campos.'; errorEl.style.display='block'; return; }
+    if (password.length<6) { errorEl.textContent='La contraseña debe tener al menos 6 caracteres.'; errorEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Creando cuenta...';
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/registro`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,apellido,dni,email,password,codigoVerificacion:codigo})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error al registrarse.'; errorEl.style.display='block'; return; }
+        successEl.textContent=`¡Cuenta creada! Tu alias: ${data.usuario.alias}. Ingresá con tu DNI y contraseña.`;
+        successEl.style.display='block';
+        setTimeout(()=>{ switchTab('login'); volverRegStep1(); ['reg-nombre','reg-apellido','reg-dni','reg-email','reg-pass','reg-codigo'].forEach(id=>document.getElementById(id).value=''); },2500);
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+    finally { btn.disabled=false; btn.textContent='🐍 CREAR MI CUENTA'; }
+}
+
+function mostrarAdminLogin() {
+    document.getElementById('auth-screen').classList.remove('visible');
+    document.getElementById('admin-login-screen').classList.add('visible');
+}
+function volverAuth() {
+    document.getElementById('admin-login-screen').classList.remove('visible');
+    document.getElementById('auth-screen').classList.add('visible');
+}
+
+async function loginAdmin() {
+    const usuario=document.getElementById('admin-user').value.trim();
+    const password=document.getElementById('admin-pass').value;
+    const errorEl=document.getElementById('admin-error');
+    const btn=document.getElementById('btn-admin-login');
+    errorEl.style.display='none'; btn.disabled=true; btn.textContent='Verificando...';
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,password})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Credenciales incorrectas.'; errorEl.style.display='block'; return; }
+        document.getElementById('admin-login-screen').classList.remove('visible');
+        // Mostrar desktop layout con panel admin
+        mostrarDesktopAdmin();
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+    finally { btn.disabled=false; btn.textContent='🔑 INGRESAR AL PANEL'; }
+}
+
+function mostrarDesktopAdmin() {
+    chatMostrar(false);
+    const dl = document.getElementById('desktop-layout');
+    dl.classList.add('visible');
+    document.getElementById('desktop-loading').style.display = 'none';
+    document.getElementById('desktop-content').style.display = 'block';
+    document.getElementById('main-content-panel').classList.add('hidden');
+    document.getElementById('admin-content-panel').classList.add('active');
+    // Ocultar sidebar items de usuario
+    document.getElementById('sidebar-balance-block').style.display = 'none';
+    document.getElementById('topbar-greeting').textContent = 'PANEL ADMIN';
+    cargarAdmin();
+}
+
+function salirAdmin() {
+    document.getElementById('admin-content-panel').classList.remove('active');
+    document.getElementById('main-content-panel').classList.remove('hidden');
+    if (datosUsuario) {
+        document.getElementById('sidebar-balance-block').style.display = 'block';
+        actualizarPantalla();
+    }
+}
+
+function logout() {
+    usuarioId = null; datosUsuario = null;
+    chatMostrar(false);
+    // Ocultar todo
+    document.getElementById('desktop-layout').classList.remove('visible');
+    document.getElementById('mobile-app-wrapper').classList.remove('visible');
+    document.getElementById('profile-overlay').classList.remove('active');
+    document.getElementById('auth-screen').classList.add('visible');
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-error').style.display = 'none';
+    // Reset admin panel
+    document.getElementById('admin-content-panel').classList.remove('active');
+    document.getElementById('main-content-panel').classList.remove('hidden');
+}
+
+// ══ MAIN APP ══
+function mostrarApp() {
+    document.getElementById('auth-screen').classList.remove('visible');
+
+    if (esDesktop()) {
+        // DESKTOP
+        const dl = document.getElementById('desktop-layout');
+        dl.classList.add('visible');
+        document.getElementById('desktop-loading').style.display = 'flex';
+        document.getElementById('desktop-content').style.display = 'none';
+        actualizarPantallaDesktop();
+    } else {
+        // MOBILE
+        const mw = document.getElementById('mobile-app-wrapper');
+        mw.classList.add('visible');
+        document.getElementById('mobile-loading').style.display = 'flex';
+        document.getElementById('mobile-app-content').style.display = 'none';
+        actualizarPantallaMobile();
+    }
+}
+
+// Manejo de resize (por si rota el dispositivo)
+let resizeTimer;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        if (datosUsuario && usuarioId) {
+            if (esDesktop()) {
+                document.getElementById('mobile-app-wrapper').classList.remove('visible');
+                const dl = document.getElementById('desktop-layout');
+                if (!dl.classList.contains('visible')) {
+                    dl.classList.add('visible');
+                    renderDesktop(datosUsuario);
+                }
+            } else {
+                document.getElementById('desktop-layout').classList.remove('visible');
+                const mw = document.getElementById('mobile-app-wrapper');
+                if (!mw.classList.contains('visible')) {
+                    mw.classList.add('visible');
+                    renderMobile(datosUsuario);
+                }
+            }
+        }
+    }, 250);
+});
+
+// ══ MONEDA ACTIVA (qué caja se muestra arriba: ARS o USD) ══
+let monedaActiva = 'ARS';
+
+// Devuelve los datos (saldo/alias/cbu/moneda) de la caja actualmente seleccionada
+function obtenerCuentaActiva() {
+    const cuentas = datosUsuario?.cuentas || [];
+    return cuentas.find(c => c.moneda === monedaActiva)
+        || { moneda: monedaActiva, saldo: datosUsuario?.saldo || 0, alias: datosUsuario?.alias, cbu: datosUsuario?.cbu };
+}
+
+function cambiarMonedaVista(moneda) {
+    monedaActiva = moneda;
+    if (datosUsuario) {
+        if (document.getElementById('desktop-content')?.style.display !== 'none') renderDesktop(datosUsuario);
+        else renderMobile(datosUsuario);
+    }
+}
+
+// Arma los botones ARS/USD de la tarjeta de saldo (desktop); se oculta si solo hay una caja
+function renderMonedaSwitch(cuentas) {
+    if (!cuentas || cuentas.length < 2) return '';
+    return cuentas.map(c => `<button class="mon-pill ${c.moneda===monedaActiva?'active':''}" onclick="cambiarMonedaVista('${c.moneda}')">${c.moneda}</button>`).join('');
+}
+
+// ══ TARJETA DE DÉBITO ══
+let tarjetaVolteada = false;
+function renderTarjeta(data) {
+    const c = obtenerCuentaActiva();
+    const t = (data.tarjetas || {})[c.moneda] || {};
+    const num = String(t.numero || '').replace(/(\d{4})(?=\d)/g, '$1 ') || '•••• •••• •••• ••••';
+    const nombre = (data.nombre || '').toUpperCase();
+    const usd = c.moneda === 'USD';
+    return `
+    <div class="tarjeta ${usd ? 'usd' : 'ars'} ${tarjetaVolteada ? 'flipped' : ''}" onclick="voltearTarjeta()" title="Tocá para dar vuelta la tarjeta">
+        <div class="tarjeta-cara tarjeta-front">
+            <div class="tarjeta-top">
+                <div class="tarjeta-brand"><span>🐍</span> LA COBRA</div>
+                <div class="tarjeta-tipo">Débito · ${c.moneda}</div>
+            </div>
+            <div class="tarjeta-mid"><div class="tarjeta-chip"></div><i class="ti ti-wifi tarjeta-nfc"></i></div>
+            <div class="tarjeta-num">${num}</div>
+            <div class="tarjeta-bottom">
+                <div style="min-width:0"><div class="tarjeta-label">Titular</div><div class="tarjeta-titular">${nombre}</div></div>
+                <div style="text-align:right"><div class="tarjeta-label">Vence</div><div class="tarjeta-venc">${t.vencimiento || '--/--'}</div></div>
+            </div>
+        </div>
+        <div class="tarjeta-cara tarjeta-back">
+            <div class="tarjeta-banda"></div>
+            <div class="tarjeta-back-body">
+                <div class="tarjeta-firma"><span class="tarjeta-firma-linea"></span><span class="tarjeta-cvv">${t.cvv || '---'}</span></div>
+                <div class="tarjeta-label" style="margin:0">CVV · Caja de ahorro ${c.moneda}</div>
+                ${t.numero ? `<button class="tarjeta-copiar" onclick="event.stopPropagation();copiarTexto('${t.numero}','Número copiado')"><i class="ti ti-copy"></i> Copiar número</button>` : ''}
+            </div>
+        </div>
+    </div>
+    <div class="tarjeta-hint">Tocá la tarjeta para ver el CVV</div>`;
+}
+function voltearTarjeta() {
+    tarjetaVolteada = !tarjetaVolteada;
+    document.querySelectorAll('.tarjeta').forEach(t => t.classList.toggle('flipped', tarjetaVolteada));
+}
+function pintarTarjetas(data) { document.querySelectorAll('.tarjeta-slot').forEach(el => { el.innerHTML = renderTarjeta(data); }); }
+
+// ══ RENDER DESKTOP ══
+function renderDesktop(data) {
+    datosUsuario = data;
+    chatMostrar(true);
+    const activa = obtenerCuentaActiva();
+
+    // Sidebar (siempre muestra la cuenta ARS, que es la identidad principal)
+    document.getElementById('sidebar-balance-block').style.display = 'block';
+    document.getElementById('sb-saldo').textContent = fmt(data.saldo);
+    document.getElementById('sb-alias').textContent = data.alias;
+    pintarAvatares();
+    document.getElementById('sidebar-username').textContent = data.nombre + ' ' + (data.apellido || '');
+
+    // Topbar
+    document.getElementById('topbar-greeting').textContent = 'HOLA, ' + data.nombre.split(' ')[0].toUpperCase() + ' 🐍';
+
+    // Balance card — refleja la moneda activa (ARS o USD)
+    document.getElementById('dc-saldo').textContent = fmt(activa.saldo);
+    document.getElementById('dc-simbolo').textContent = activa.moneda==='USD' ? 'US$' : '$';
+    document.getElementById('dc-alias').textContent = activa.alias || 'Sin alias asignado';
+    document.getElementById('dc-moneda').textContent = activa.moneda;
+    const switchEl = document.getElementById('moneda-switch');
+    const switchHtml = renderMonedaSwitch(data.cuentas);
+    switchEl.innerHTML = switchHtml;
+    switchEl.style.display = switchHtml ? 'flex' : 'none';
+
+    // Panel lateral "Datos de tu cuenta" — también sigue a la moneda activa
+    document.getElementById('side-alias').childNodes[0].textContent = (activa.alias || '-') + ' ';
+    document.getElementById('side-cbu').textContent = activa.cbu || '-';
+    document.getElementById('side-moneda').textContent = activa.moneda;
+    document.getElementById('side-titular').textContent = data.nombre + ' ' + (data.apellido || '');
+
+    // Tarjeta de débito (sigue a la caja activa)
+    pintarTarjetas(data);
+
+    // Cajas de ahorro
+    document.getElementById('side-cuentas').innerHTML = renderCuentas(data.cuentas);
+
+    // Stats — acotadas a la moneda activa, para no sumar pesos y dólares juntos
+    const h = (data.historial || []).filter(m => (m.moneda || 'ARS') === monedaActiva);
+    const ingresos = h.filter(m=>m.monto>0).reduce((a,m)=>a+Math.abs(m.monto),0);
+    const egresos = h.filter(m=>m.monto<0).reduce((a,m)=>a+Math.abs(m.monto),0);
+    const simboloCorto = monedaActiva==='USD' ? 'US' : ''; // fmtCorto ya agrega el '$'
+    document.getElementById('stat-ingresos').textContent = simboloCorto + fmtCorto(ingresos);
+    document.getElementById('stat-egresos').textContent = simboloCorto + fmtCorto(egresos);
+    document.getElementById('stat-movs').textContent = h.length;
+
+    // Historial: se muestran todos los movimientos (ARS y USD), cada uno con su símbolo
+    document.getElementById('historial-container').innerHTML = renderHistorial(data.historial || [], filtroActivo);
+
+    // Mostrar
+    document.getElementById('desktop-loading').style.display = 'none';
+    document.getElementById('desktop-content').style.display = 'block';
+}
+
+async function actualizarPantallaDesktop() {
+    try {
+        const res = await fetch(`${BASE_URL}/api/usuarios/${usuarioId}`);
+        const data = await res.json();
+        if (data.error) return;
+        renderDesktop(data);
+    } catch { toast('Error al actualizar','error'); }
+}
+
+// ══ RENDER MOBILE (igual que el original) ══
+function renderMobile(data) {
+    datosUsuario = data;
+    chatMostrar(true);
+    const content = document.getElementById('mobile-app-content');
+    content.innerHTML = `
+        <div class="header">
+            <div>
+                <div class="header-greeting">HOLA, ${data.nombre.split(' ')[0].toUpperCase()} 🐍</div>
+                <div class="header-sub">BANCO LA COBRA</div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" onclick="alternarTema()" aria-label="Cambiar tema"><i class="ti theme-icon ${iconoTema()}"></i></button>
+                <div class="avatar ${data.foto?'has-photo':''}" onclick="abrirPerfil()" ${data.foto?`style="background-image:url('${data.foto}')"`:''}>${data.nombre.charAt(0).toUpperCase()}</div>
+            </div>
+        </div>
+        <div class="balance-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                <div class="balance-tag">💰 CAJA DE AHORRO · ${monedaActiva}</div>
+                ${(data.cuentas||[]).some(c=>c.moneda==='USD') ? `<div class="mon-switch">${(data.cuentas||[]).map(c=>`<button class="mon-pill ${c.moneda===monedaActiva?'active':''}" onclick="cambiarMonedaVista('${c.moneda}')">${c.moneda}</button>`).join('')}</div>` : ''}
+            </div>
+            <div class="balance-amount"><span>${obtenerCuentaActiva().moneda==='USD'?'US$':'$'}</span> ${fmt(obtenerCuentaActiva().saldo)}</div>
+            <div class="balance-alias">${obtenerCuentaActiva().alias || 'Sin alias asignado'}</div>
+            <div class="balance-actions">
+                <button class="bal-btn" onclick="abrirModalEnviar()"><i class="ti ti-arrow-up-right"></i> ENVIAR</button>
+                <button class="bal-btn" onclick="abrirModalRecibir()"><i class="ti ti-arrow-down-left"></i> RECIBIR</button>
+            </div>
+        </div>
+        <div class="tarjeta-wrap">${renderTarjeta(data)}</div>
+        <div class="section-label">Acciones rápidas</div>
+        <div class="quick-grid">
+            <div class="quick-item" onclick="abrirModal('modal-pagar')"><div class="quick-icon" style="background:linear-gradient(135deg,#1D9E75,#20c997)"><i class="ti ti-bolt"></i></div><span class="quick-label">Servicios</span></div>
+            <div class="quick-item" onclick="abrirModal('modal-cargar')"><div class="quick-icon" style="background:linear-gradient(135deg,var(--gold-dark),var(--gold))"><i class="ti ti-plus"></i></div><span class="quick-label">Cargar</span></div>
+        </div>
+        <div class="side-card">
+            <div class="side-card-header"><div class="side-card-title">Mis cajas de ahorro</div></div>
+            <div class="side-card-body">${renderCuentas(data.cuentas)}</div>
+        </div>
+        <div class="history-card">
+            <div class="history-header"><h3>Actividad</h3><button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button></div>
+            <div id="historial-container">${renderHistorial(data.historial,'todos')}</div>
+        </div>
+    `;
+    document.getElementById('mobile-loading').style.display = 'none';
+    content.style.display = 'block';
+}
+
+async function actualizarPantallaMobile() {
+    try {
+        const res = await fetch(`${BASE_URL}/api/usuarios/${usuarioId}`);
+        const data = await res.json();
+        if (data.error) return;
+        renderMobile(data);
+    } catch { toast('Error al actualizar','error'); }
+}
+
+// Unificado: llama al correcto según tamaño
+async function actualizarPantalla() {
+    if (esDesktop()) await actualizarPantallaDesktop();
+    else await actualizarPantallaMobile();
+}
+
+// ══ HISTORIAL ══
+function setFiltro(filtro, btn) {
+    filtroActivo = filtro;
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if (datosUsuario) document.getElementById('historial-container').innerHTML = renderHistorial(datosUsuario.historial, filtro);
+}
+
+function renderHistorial(h, filtro='todos') {
+    if (!h||h.length===0) return '<p class="tx-empty">🐍 Sin movimientos aún.</p>';
+    let filtrado=h;
+    if (filtro!=='todos') filtrado=h.filter(m=>{
+        const t=m.tipo.toLowerCase();
+        if (filtro==='ingreso') return t.includes('ingreso');
+        if (filtro==='enviada') return t.includes('enviada');
+        if (filtro==='recibida') return t.includes('recibida');
+        if (filtro==='servicio') return t.includes('servicio');
+        return true;
+    });
+    if (filtrado.length===0) return '<p class="tx-empty">Sin resultados.</p>';
+    return filtrado.map(m => {
+        const esIn=m.monto>0, clase=esIn?'in':'out', icono=esIn?'ti-arrow-down-left':'ti-arrow-up-right';
+        const fecha=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+        const desc=m.descripcion?`<br><span style="font-size:10px;color:var(--muted);font-style:italic">${m.descripcion}</span>`:'';
+        return `<div class="tx-item" onclick="verComprobanteTx(${JSON.stringify(m).replace(/"/g,'&quot;')})">
+            <div class="tx-icon ${clase}"><i class="ti ${icono}"></i></div>
+            <div class="tx-info">
+                <p class="tx-name">${m.tipo}</p>
+                <p class="tx-date">${m.detalle?m.detalle+' · ':''}${fecha}${desc}</p>
+            </div>
+            <span class="tx-amount ${clase}">${esIn?'+':'-'}${(m.moneda==='USD'?'US$':'$')}${fmt(Math.abs(m.monto))}</span>
+        </div>`;
+    }).join('');
+}
+
+// ══ SIDEBAR NAV ══
+function showSection(section) {
+    document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
+    document.getElementById('nav-'+section)?.classList.add('active');
+    // Por ahora solo hay "inicio" y "actividad"
+    if (section==='actividad') {
+        // scroll al historial
+        document.getElementById('historial-container')?.scrollIntoView({behavior:'smooth'});
+    }
+}
+
+// ══ CHATBOT "COBRITA" (respuestas predeterminadas; usa los datos reales de la cuenta, sin servicios externos) ══
+const chatEstado = { iniciado: false };
+const chatEsc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const chatNorm = t => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9$ ]/g,' ').replace(/\s+/g,' ').trim();
+const chatMonto = (n, mon) => (mon === 'USD' ? 'US$' : '$') + fmt(n);
+
+const CHAT_ACCIONES = {
+    enviar:    { label: 'Transferir',        fn: () => abrirModalEnviar() },
+    recibir:   { label: 'Recibir dinero',    fn: () => abrirModalRecibir() },
+    cargar:    { label: 'Ingresar dinero',   fn: () => abrirModal('modal-cargar') },
+    pagar:     { label: 'Pagar servicios',   fn: () => abrirModal('modal-pagar') },
+    perfil:    { label: 'Abrir mi perfil',   fn: () => abrirPerfil() },
+    usd:       { label: 'Abrir caja en USD', fn: () => abrirCajaUSD() },
+    tema:      { label: 'Cambiar tema',      fn: () => alternarTema() },
+    actividad: { label: 'Ver actividad',     fn: () => { if (esDesktop()) showSection('actividad'); else document.getElementById('historial-container')?.scrollIntoView({behavior:'smooth'}); } },
+    tarjeta:   { label: 'Ver mi tarjeta',    fn: () => document.querySelector('.tarjeta-slot:not(.tarjeta-narrow) .tarjeta, .tarjeta-wrap .tarjeta')?.scrollIntoView({behavior:'smooth', block:'center'}) },
+    copiaralias: { label: 'Copiar alias',    fn: () => { const c = obtenerCuentaActiva(); if (c.alias) copiarTexto(c.alias, 'Alias copiado'); } },
+    copiarcbu:   { label: 'Copiar CBU',      fn: () => { const c = obtenerCuentaActiva(); if (c.cbu) copiarTexto(c.cbu, 'CBU copiado'); } },
+};
+
+const CHAT_SUGERENCIAS = ['¿Cuál es mi saldo?', 'Últimos movimientos', '¿Cómo transfiero?', 'Mi alias y CBU', 'Mi tarjeta', 'Ayuda'];
+
+function chatCuentas() { return datosUsuario?.cuentas?.length ? datosUsuario.cuentas : [obtenerCuentaActiva()]; }
+
+const CHAT_INTENTS = [
+    { re: /^(hola|buenas|buen dia|buenos dias|buenas tardes|buenas noches|hey|ey|que tal|holi)\b/,
+      resp: () => ({ html: `¡Hola, <b>${chatEsc((datosUsuario.nombre||'').split(' ')[0])}</b>! 🐍 Soy <b>Cobrita</b>, tu asistente de La Cobra. Puedo decirte tu saldo, tus movimientos, y guiarte para transferir, ingresar dinero o pagar servicios.`, chips: ['saldo','movimientos'] }) },
+    { re: /gracias|genial|perfecto|excelente|buenisimo|dale gracias/,
+      resp: () => ({ html: '¡De nada! 🐍 Si necesitás algo más, acá estoy.' }) },
+    { re: /^(chau|adios|hasta luego|nos vemos|bye)\b/,
+      resp: () => ({ html: '¡Hasta luego! La cobra siempre cobra. 🐍' }) },
+    { re: /ayuda|que (podes|puedes|sabes) hacer|opciones|menu|comandos/,
+      resp: () => ({ html: 'Puedo ayudarte con:<ul class="chat-list"><li>Tu <b>saldo</b> y <b>movimientos</b></li><li><b>Transferir</b>, <b>recibir</b> e <b>ingresar</b> dinero</li><li><b>Pagar servicios</b></li><li>Tu <b>alias</b>, <b>CBU</b> y <b>tarjeta</b></li><li>Caja en <b>dólares</b></li><li>Cambiar <b>alias</b>, <b>contraseña</b>, <b>foto</b> o <b>tema</b></li></ul>' }) },
+    { re: /saldo|cuanto (tengo|plata|dinero)|plata tengo|disponible/,
+      resp: () => { const cs = chatCuentas();
+          return { html: 'Tu saldo disponible:<ul class="chat-list">' + cs.map(c => `<li><b>${chatMonto(c.saldo, c.moneda)}</b> · Caja de ahorro ${c.moneda}</li>`).join('') + '</ul>', acciones: ['actividad'] }; } },
+    { re: /movimiento|actividad|historial|ultimos|ultimas|transaccion|que (hice|gaste)|compras/,
+      resp: () => { const h = (datosUsuario.historial || []).slice(0, 5);
+          if (!h.length) return { html: 'Todavía no tenés movimientos. 🐍', acciones: ['cargar'] };
+          const filas = h.map(m => { const ent = m.monto > 0; const f = m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'short'}) : '';
+              return `<div class="chat-mov"><div>${chatEsc(m.tipo)}<small>${chatEsc(m.descripcion || m.detalle || '')} ${f}</small></div><span class="${ent?'in':'out'}">${ent?'+':'-'}${chatMonto(Math.abs(m.monto), m.moneda)}</span></div>`; }).join('');
+          return { html: `Tus últimos ${h.length} movimientos:<div style="margin-top:6px">${filas}</div>`, acciones: ['actividad'] }; } },
+    { re: /gaste|gastos|ingresos|egresos|resumen|balance del mes/,
+      resp: () => { const h = datosUsuario.historial || []; const mons = [...new Set(h.map(m => m.moneda || 'ARS'))];
+          if (!h.length) return { html: 'Todavía no hay movimientos para resumir.' };
+          const lineas = mons.map(mon => { const x = h.filter(m => (m.moneda||'ARS') === mon);
+              const i = x.filter(m => m.monto > 0).reduce((a,m) => a + m.monto, 0), e = x.filter(m => m.monto < 0).reduce((a,m) => a + Math.abs(m.monto), 0);
+              return `<li><b>${mon}</b>: ingresaron ${chatMonto(i, mon)} · salieron ${chatMonto(e, mon)}</li>`; }).join('');
+          return { html: `En tus últimos ${h.length} movimientos:<ul class="chat-list">${lineas}</ul>` }; } },
+    { re: /\bcvv\b|codigo de seguridad|vencimiento|numero de (la )?tarjeta|tarjeta|debito/,
+      resp: () => { const c = obtenerCuentaActiva(); const t = (datosUsuario.tarjetas || {})[c.moneda];
+          const fin = t?.numero ? t.numero.slice(-4) : null;
+          return { html: `Tenés una <b>tarjeta de débito virtual</b> por cada caja${fin ? ` (la de ${c.moneda} termina en <b>${fin}</b>)` : ''}. Está en <b>Inicio</b>: tocala para darla vuelta y ver el CVV. Por seguridad, acá en el chat no te muestro el CVV.`, acciones: ['tarjeta'] }; } },
+    { re: /\bcbu\b|\bcvu\b|alias|mis datos|datos de (mi )?cuenta/,
+      resp: () => { if (/cambi|modific|nuevo|actualiz/.test(chatEstado.ultimo || '')) return CHAT_INTENTS_ALIAS_CAMBIO();
+          const cs = chatCuentas();
+          return { html: 'Datos de tus cajas:<ul class="chat-list">' + cs.map(c => `<li><b>${c.moneda}</b><br>Alias: ${chatEsc(c.alias || 'sin asignar')}<br>CBU: <span style="font-family:'Space Mono',monospace;font-size:11px;word-break:break-all">${chatEsc(c.cbu || '-')}</span></li>`).join('') + '</ul>', acciones: ['copiaralias','copiarcbu'] }; } },
+    { re: /recibir|cobrar|que le paso|donde me (depositan|transfieren)|me quieren (pagar|transferir)/,
+      resp: () => { const c = obtenerCuentaActiva(); return { html: `Para que te transfieran, pasá tu alias <b>${chatEsc(c.alias || '(sin alias)')}</b> o tu CBU. Tocá <b>Recibir</b> para verlos y compartirlos.`, acciones: ['recibir','copiaralias'] }; } },
+    { re: /transf|enviar|envio|mandar|girar|pasar plata|depositar a/,
+      resp: () => ({ html: 'Para <b>transferir</b>:<ol class="chat-list"><li>Tocá <b>Transferir</b> (o <b>Enviar</b> en el celular).</li><li>Ingresá el <b>CBU o alias</b> del destinatario, de este banco o de otro.</li><li>Verificá el nombre que aparece, poné el monto y confirmá.</li></ol>Vas a recibir un comprobante al terminar.', acciones: ['enviar'] }) },
+    { re: /ingresar|cargar|depositar|poner plata|agregar (plata|dinero|saldo)|recargar/,
+      resp: () => ({ html: 'Para <b>ingresar dinero</b> a tu caja, tocá <b>Ingresar dinero</b> (o <b>Cargar</b> en el celular), elegí la caja (ARS o USD), poné el monto y confirmá.', acciones: ['cargar'] }) },
+    { re: /servicio|pagar|factura|\b(luz|gas|agua|internet|epec)\b|impuesto/,
+      resp: () => ({ html: 'Para <b>pagar servicios</b>, tocá <b>Servicios</b>, elegí el que querés pagar, ingresá el monto y confirmá. Se descuenta de tu saldo en pesos.', acciones: ['pagar'] }) },
+    { re: /dolar|dolares|\busd\b|moneda extranjera|u\$s/,
+      resp: () => { const tiene = (datosUsuario.cuentas || []).some(c => c.moneda === 'USD');
+          return tiene ? { html: 'Ya tenés una <b>caja en dólares</b>. Cambiá entre <b>ARS</b> y <b>USD</b> con los botones de la tarjeta de saldo: tu tarjeta, alias y CBU cambian con ella.' }
+                       : { html: 'Podés abrir una <b>caja de ahorro en dólares</b> sin costo. Se crea con su propio alias, CBU y tarjeta.', acciones: ['usd'] }; } },
+    { re: /cambiar (el )?alias|nuevo alias|modificar alias/,
+      resp: () => CHAT_INTENTS_ALIAS_CAMBIO() },
+    { re: /contrasena|clave|password|cambiar (mi )?pass/,
+      resp: () => ({ html: 'Para <b>cambiar tu contraseña</b>, abrí tu perfil y buscá "Cambiar contraseña". Te enviamos un código de verificación al email para confirmarlo.', acciones: ['perfil'] }) },
+    { re: /foto|imagen de perfil|avatar|perfil/,
+      resp: () => ({ html: 'En tu <b>perfil</b> podés subir o cambiar tu foto (tocá la cámara sobre el avatar), cambiar el alias y la contraseña.', acciones: ['perfil'] }) },
+    { re: /modo (oscuro|claro)|tema|oscuro|claro|dark|light/,
+      resp: () => ({ html: 'Podés alternar entre modo <b>claro</b> y <b>oscuro</b> cuando quieras.', acciones: ['tema'] }) },
+    { re: /seguro|seguridad|estafa|fraude|me robaron|hackea|phishing|codigo de verificacion/,
+      resp: () => ({ html: '<b>Tips de seguridad</b><ul class="chat-list"><li>Nunca compartas tu contraseña ni los códigos de verificación.</li><li>El banco no te va a pedir tu clave ni tu CVV por mensaje.</li><li>Verificá siempre el nombre del destinatario antes de confirmar una transferencia.</li></ul>Si notás algo raro, cambiá tu contraseña ya.', acciones: ['perfil'] }) },
+    { re: /humano|persona|asesor|soporte|reclamo|telefono|contacto/,
+      resp: () => ({ html: 'Soy Cobrita, un asistente automático, y no puedo derivarte con una persona desde acá. Para reclamos o temas que no pueda resolver, comunicate con el banco por sus canales de atención.' }) },
+];
+function CHAT_INTENTS_ALIAS_CAMBIO() {
+    return { html: 'Para <b>cambiar tu alias</b>, abrí tu perfil y completá "Cambiar alias". Solo letras, números, puntos y guiones, y tiene que ser único en todo el sistema bancario.', acciones: ['perfil'] };
+}
+
+function chatResponder(texto) {
+    const t = chatNorm(texto);
+    chatEstado.ultimo = t;
+    for (const it of CHAT_INTENTS) if (it.re.test(t)) return it.resp();
+    return CHAT_FALLBACK; // sin regla: sugiere las opciones
+}
+const CHAT_FALLBACK = { html: 'Mmm, no estoy seguro de haber entendido. 🤔 Probá con una de estas opciones o escribí <b>ayuda</b>.' };
+
+function chatAgregar(clase, html) {
+    const box = document.getElementById('chat-msgs');
+    const d = document.createElement('div'); d.className = 'chat-msg ' + clase; d.innerHTML = html;
+    box.appendChild(d); box.scrollTop = box.scrollHeight; return d;
+}
+function chatBot(r) {
+    const d = chatAgregar('bot', r.html);
+    if (r.acciones?.length) {
+        const w = document.createElement('div'); w.className = 'chat-acciones';
+        r.acciones.forEach(k => { const a = CHAT_ACCIONES[k]; if (!a) return; const b = document.createElement('button'); b.type = 'button'; b.textContent = a.label;
+            b.onclick = () => { if (!['copiaralias','copiarcbu','tema'].includes(k) && window.innerWidth <= 768) chatAlternar(false); a.fn(); }; w.appendChild(b); });
+        d.appendChild(w);
+    }
+    document.getElementById('chat-msgs').scrollTop = 1e9;
+}
+async function chatPreguntar(texto) {
+    texto = String(texto).trim(); if (!texto || !datosUsuario) return;
+    chatAgregar('user', chatEsc(texto));
+    const box = document.getElementById('chat-msgs');
+    const tip = document.createElement('div'); tip.className = 'chat-typing'; tip.innerHTML = '<i></i><i></i><i></i>'; box.appendChild(tip); box.scrollTop = box.scrollHeight;
+    const r = chatResponder(texto);
+    await new Promise(ok => setTimeout(ok, 450));
+    tip.remove();
+    chatBot(r);
+}
+const chatChips = document.getElementById('chat-chips'), chatBarra = document.getElementById('chat-chips-bar');
+function chatBarraActualizar() {
+    const max = chatChips.scrollWidth - chatChips.clientWidth;
+    chatBarra.classList.toggle('hay', max > 4);
+    chatBarra.value = max > 0 ? (chatChips.scrollLeft / max) * 100 : 0;
+}
+chatBarra.addEventListener('input', () => { chatChips.scrollLeft = (chatBarra.value / 100) * (chatChips.scrollWidth - chatChips.clientWidth); });
+chatChips.addEventListener('scroll', chatBarraActualizar);
+window.addEventListener('resize', chatBarraActualizar);
+document.getElementById('chat-chips').addEventListener('wheel', e => {
+    const c = e.currentTarget;
+    if (c.scrollWidth > c.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { c.scrollLeft += e.deltaY; e.preventDefault(); }
+}, { passive: false });
+function chatEnviar(e) { e.preventDefault(); const i = document.getElementById('chat-input'); const v = i.value; i.value = ''; chatPreguntar(v); }
+function chatIniciar() {
+    if (chatEstado.iniciado || !datosUsuario) return;
+    chatEstado.iniciado = true;
+    document.getElementById('chat-chips').innerHTML = CHAT_SUGERENCIAS.map(q => `<button type="button" class="chat-chip" onclick="chatPreguntar(this.textContent)">${chatEsc(q)}</button>`).join('');
+    chatBarraActualizar();
+    chatBot({ html: `¡Hola, <b>${chatEsc((datosUsuario.nombre||'').split(' ')[0])}</b>! 🐍 Soy <b>Cobrita</b>, tu asistente de La Cobra. Preguntame por tu saldo, tus movimientos o cómo hacer una operación.` });
+}
+function chatAlternar(forzar) {
+    const p = document.getElementById('chat-panel');
+    const abrir = typeof forzar === 'boolean' ? forzar : !p.classList.contains('open');
+    if (abrir) { chatIniciar(); setTimeout(chatBarraActualizar, 280); document.getElementById('chat-dot').style.display = 'none'; }
+    p.classList.toggle('open', abrir);
+    if (abrir && window.innerWidth > 768) setTimeout(() => document.getElementById('chat-input').focus(), 250);
+}
+function chatMostrar(si) {
+    document.getElementById('chat-fab').classList.toggle('visible', si);
+    if (!si) {
+        document.getElementById('chat-panel').classList.remove('open');
+        document.getElementById('chat-msgs').innerHTML = ''; document.getElementById('chat-chips').innerHTML = ''; chatBarra.classList.remove('hay');
+        chatEstado.iniciado = false; document.getElementById('chat-dot').style.display = '';
+    }
+}
+
+// ══ PERFIL ══
+function abrirPerfil() {
+    if (!datosUsuario) return;
+    const d=datosUsuario;
+    const c=obtenerCuentaActiva(); // la caja que se está viendo (ARS o USD)
+    errorFoto('');
+    pintarAvatares();
+    document.getElementById('profile-name').textContent=d.nombre.toUpperCase();
+    document.getElementById('profile-email').textContent=d.email||'Sin email';
+    document.getElementById('profile-data').innerHTML=`
+        <div class="profile-row"><span class="profile-row-label">Alias (${c.moneda})</span><span class="profile-row-value">${c.alias||'Sin asignar'}${c.alias?`<button class="copy-btn" onclick="copiarTexto('${c.alias}','Alias copiado')"><i class="ti ti-copy"></i></button>`:''}</span></div>
+        <div class="profile-row"><span class="profile-row-label">CBU</span><span class="profile-row-value" style="font-size:10px;font-family:'Space Mono',monospace;word-break:break-all">${c.cbu||'-'}<button class="copy-btn" onclick="copiarTexto('${c.cbu||''}','CBU copiado')"><i class="ti ti-copy"></i></button></span></div>
+        <div class="profile-row"><span class="profile-row-label">Moneda</span><span class="profile-row-value">${c.moneda}</span></div>
+        <div class="profile-row"><span class="profile-row-label">Saldo</span><span class="profile-row-value" style="color:var(--gold)">${c.moneda==='USD'?'US$':'$'}${fmt(c.saldo)}</span></div>
+    `;
+    inicializarSelectorMoneda('alias');
+    document.getElementById('nuevo-alias').value='';
+    ['alias-error','alias-success'].forEach(id=>{document.getElementById(id).style.display='none';});
+    ['pass-actual','pass-nueva','pass-confirm','pass-codigo'].forEach(id=>document.getElementById(id).value='');
+    ['pass-error-1','pass-error','pass-success'].forEach(id=>{document.getElementById(id).style.display='none';});
+    document.getElementById('pass-step-1').classList.add('active');
+    document.getElementById('pass-step-2').classList.remove('active');
+    document.getElementById('profile-overlay').classList.add('active');
+}
+function cerrarPerfil() { document.getElementById('profile-overlay').classList.remove('active'); }
+document.getElementById('profile-overlay').addEventListener('click', e=>{ if(e.target===document.getElementById('profile-overlay')) cerrarPerfil(); });
+
+async function solicitarCodigoPassword() {
+    const actual=document.getElementById('pass-actual').value;
+    const nueva=document.getElementById('pass-nueva').value;
+    const confirm=document.getElementById('pass-confirm').value;
+    const errorEl=document.getElementById('pass-error-1');
+    errorEl.style.display='none';
+    if (!actual||!nueva||!confirm) { errorEl.textContent='Completá todos los campos.'; errorEl.style.display='block'; return; }
+    if (nueva.length<6) { errorEl.textContent='La nueva contraseña debe tener al menos 6 caracteres.'; errorEl.style.display='block'; return; }
+    if (nueva!==confirm) { errorEl.textContent='Las contraseñas no coinciden.'; errorEl.style.display='block'; return; }
+    try {
+        const res=await fetch(`${BASE_URL}/api/verificacion/enviar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:datosUsuario.email,tipo:'password'})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        document.getElementById('pass-step-1').classList.remove('active');
+        document.getElementById('pass-step-2').classList.add('active');
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+function volverPassStep1() {
+    document.getElementById('pass-step-2').classList.remove('active');
+    document.getElementById('pass-step-1').classList.add('active');
+}
+async function cambiarPassword() {
+    const actual=document.getElementById('pass-actual').value;
+    const nueva=document.getElementById('pass-nueva').value;
+    const codigo=document.getElementById('pass-codigo').value.trim();
+    const errorEl=document.getElementById('pass-error');
+    const successEl=document.getElementById('pass-success');
+    errorEl.style.display='none'; successEl.style.display='none';
+    if (!codigo) { errorEl.textContent='Ingresá el código.'; errorEl.style.display='block'; return; }
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/cambiar-password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passwordActual:actual,passwordNueva:nueva,codigoVerificacion:codigo})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        successEl.textContent='✓ Contraseña actualizada.'; successEl.style.display='block';
+        setTimeout(()=>{ volverPassStep1(); ['pass-actual','pass-nueva','pass-confirm','pass-codigo'].forEach(id=>document.getElementById(id).value=''); },1500);
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+
+// ══ CAMBIAR ALIAS ══
+async function cambiarAlias() {
+    const alias=document.getElementById('nuevo-alias').value.trim();
+    const errorEl=document.getElementById('alias-error');
+    const successEl=document.getElementById('alias-success');
+    errorEl.style.display='none'; successEl.style.display='none';
+    if (!alias) { errorEl.textContent='Ingresá el nuevo alias.'; errorEl.style.display='block'; return; }
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/alias`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({alias,moneda:monedaModal.alias})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        successEl.textContent=`✓ Alias de la caja en ${monedaModal.alias} actualizado.`; successEl.style.display='block';
+        document.getElementById('nuevo-alias').value='';
+        toast('✓ Alias actualizado','success');
+        await actualizarPantalla();
+        abrirPerfil(); // refresca los datos mostrados (alias nuevo) sin cerrar el panel
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+
+// ══ CAJAS DE AHORRO (ARS + USD) ══
+function renderCuentas(cuentas) {
+    if (!cuentas || cuentas.length===0) return '-';
+    const filas = cuentas.map(c => `
+        <div class="info-row">
+            <span class="info-label">${c.moneda}</span>
+            <span class="info-value">${c.moneda==='USD'?'US$':'$'}${fmt(c.saldo)}</span>
+        </div>`).join('');
+    const tieneUSD = cuentas.some(c=>c.moneda==='USD');
+    const boton = tieneUSD ? '' : `<button class="btn-secondary" style="margin-top:10px;padding:8px" onclick="abrirCajaUSD()"><i class="ti ti-plus"></i> Abrir caja en USD</button>`;
+    return filas + boton;
+}
+
+async function abrirCajaUSD() {
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/cuentas-usd`,{method:'POST'});
+        const data=await res.json();
+        if (!res.ok) { toast(data.error||'No se pudo abrir la caja en USD','error'); return; }
+        toast('✓ Caja en USD creada','success');
+        await actualizarPantalla();
+    } catch { toast('Error de conexión','error'); }
+}
+
+// ══ COMPROBANTE ══
+function mostrarComprobante(comp) {
+    comprobanteActual=comp;
+    document.getElementById('comp-subtitulo').textContent=comp.tipo?.toUpperCase()||'OPERACIÓN';
+    document.getElementById('comp-monto').textContent=fmt(comp.monto);
+    const filas=[
+        comp.emisor&&['Emisor',comp.emisor],
+        comp.receptor&&['Destinatario',comp.receptor],
+        (comp.alias||comp.cbu)&&['Alias/CBU',comp.alias||comp.cbu],
+        comp.servicio&&['Servicio',comp.servicio],
+        comp.descripcion&&['Descripción',comp.descripcion],
+        comp.id&&['N° Comprobante','#'+comp.id],
+        comp.fecha&&['Fecha',new Date(comp.fecha).toLocaleString('es-AR')],
+    ].filter(Boolean);
+    document.getElementById('comp-datos').innerHTML=filas.map(([l,v])=>`<div class="comprobante-fila"><span class="comprobante-fila-label">${l}</span><span class="comprobante-fila-valor">${v}</span></div>`).join('');
+    document.getElementById('comprobante-overlay').classList.add('active');
+}
+function cerrarComprobante() { document.getElementById('comprobante-overlay').classList.remove('active'); }
+document.getElementById('comprobante-overlay').addEventListener('click', e=>{ if(e.target===document.getElementById('comprobante-overlay')) cerrarComprobante(); });
+
+function verComprobanteTx(m) {
+    mostrarComprobante({
+        id:m.id_movimiento, tipo:m.tipo,
+        emisor:datosUsuario?.nombre,
+        descripcion:m.descripcion,
+        monto:Math.abs(m.monto), fecha:m.fecha
+    });
+}
+
+function descargarComprobante() {
+    if (!comprobanteActual) return;
+    const c=comprobanteActual;
+    const lineas=[
+        '================================',
+        '       BANCO LA COBRA',
+        '      COMPROBANTE DE OPERACIÓN',
+        '================================','',
+        `Tipo:          ${c.tipo||'Operación'}`,
+        `N° Comprobante: #${c.id||'-'}`,
+        `Fecha:         ${c.fecha?new Date(c.fecha).toLocaleString('es-AR'):'-'}`,
+        '',`MONTO:         $ ${fmt(c.monto)}`,'',
+        c.emisor?`Emisor:        ${c.emisor}`:'',
+        c.receptor?`Destinatario:  ${c.receptor}`:'',
+        (c.alias||c.cbu)?`Alias/CBU:     ${c.alias||c.cbu}`:'',
+        c.servicio?`Servicio:      ${c.servicio}`:'',
+        c.descripcion?`Descripción:   ${c.descripcion}`:'',
+        '','================================','  www.bancolacobra.com.ar','================================',
+    ].filter(l=>l!==undefined&&l!==null).join('\n');
+    const blob=new Blob([lineas],{type:'text/plain;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`comprobante-${c.id||Date.now()}.txt`;
+    a.click();
+    toast('Comprobante descargado','success');
+}
+
+function copiarTexto(texto,msg) { navigator.clipboard.writeText(texto); toast(msg,'success'); }
+function copiarAlias() { const c=obtenerCuentaActiva(); if(c?.alias) copiarTexto(c.alias,'Alias copiado ✓'); }
+function copiarCBU() { const c=obtenerCuentaActiva(); if(c?.cbu) copiarTexto(c.cbu,'CBU copiado ✓'); }
+
+// Moneda elegida dentro del modal de enviar / cargar (independiente de la moneda que se ve en el dashboard)
+// Moneda elegida dentro de cada modal/sección (enviar, cargar, alias) — independiente de monedaActiva
+const monedaModal = { enviar: 'ARS', cargar: 'ARS', alias: 'ARS' };
+
+// Pinta el switch ARS/USD dentro de un modal; se oculta si el usuario no tiene caja en USD
+function inicializarSelectorMoneda(modal) {
+    const cuentas = datosUsuario?.cuentas || [];
+    const fieldEl = document.getElementById(`${modal}-moneda-field`);
+    const switchEl = document.getElementById(`${modal}-moneda-switch`);
+    if (cuentas.length < 2) { fieldEl.style.display = 'none'; return; }
+    fieldEl.style.display = 'block';
+    monedaModal[modal] = monedaActiva;
+    switchEl.innerHTML = cuentas.map(c => `<button type="button" class="mon-pill ${c.moneda===monedaModal[modal]?'active':''}" onclick="seleccionarMonedaModal('${modal}','${c.moneda}')">${c.moneda}</button>`).join('');
+}
+
+function seleccionarMonedaModal(modal, moneda) {
+    monedaModal[modal] = moneda;
+    document.querySelectorAll(`#${modal}-moneda-switch .mon-pill`).forEach(b => b.classList.toggle('active', b.textContent === moneda));
+}
+
+// ══ MODALES ══
+function abrirModalEnviar() {
+    ['enviar-alias','enviar-cbu','enviar-monto','enviar-desc'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('enviar-error').style.display='none';
+    document.getElementById('enviar-destinatario').style.display='none';
+    inicializarSelectorMoneda('enviar');
+    abrirModal('modal-enviar');
+}
+
+// Muestra el nombre del destinatario antes de confirmar, resolviendo alias o CBU contra el Banco Central
+async function verificarDestinatario() {
+    const alias=document.getElementById('enviar-alias').value.trim();
+    const cbu=document.getElementById('enviar-cbu').value.trim();
+    const box=document.getElementById('enviar-destinatario');
+    if (!alias && !cbu) { box.style.display='none'; return; }
+    box.style.display='block'; box.textContent='Buscando destinatario...'; box.style.color='var(--muted)';
+    try {
+        const qs = alias ? `alias=${encodeURIComponent(alias)}` : `cbu=${encodeURIComponent(cbu)}`;
+        const res = await fetch(`${BASE_URL}/api/destinatario?${qs}`);
+        const data = await res.json();
+        if (!res.ok) { box.textContent = '⚠ ' + (data.error||'Destinatario no encontrado'); box.style.color='var(--red-text)'; return; }
+        const coincide = !data.moneda || data.moneda===monedaModal.enviar;
+        box.innerHTML = `${coincide?'✓':'⚠'} <strong>${data.nombre||''} ${data.apellido||''}</strong>${data.bankCode?` · Banco #${data.bankCode}`:''}${data.moneda?` · Cuenta en ${data.moneda}`:''}${coincide?'':' — no coincide con la moneda elegida'}`;
+        box.style.color = coincide ? 'var(--gold)' : 'var(--red-text)';
+    } catch { box.textContent='No se pudo verificar el destinatario.'; box.style.color='var(--red-text)'; }
+}
+document.getElementById('enviar-alias').addEventListener('blur', verificarDestinatario);
+document.getElementById('enviar-cbu').addEventListener('blur', verificarDestinatario);
+function abrirModalRecibir() {
+    if(datosUsuario){
+        const c=obtenerCuentaActiva();
+        document.getElementById('recibir-alias').textContent=c.alias||'-';
+        document.getElementById('recibir-cbu').textContent=c.cbu||'-';
+    }
+    abrirModal('modal-recibir');
+}
+
+async function confirmarEnvio() {
+    const alias=document.getElementById('enviar-alias').value.trim();
+    const cbu=document.getElementById('enviar-cbu').value.trim();
+    const monto=parseFloat(document.getElementById('enviar-monto').value);
+    const desc=document.getElementById('enviar-desc').value.trim();
+    const errorEl=document.getElementById('enviar-error');
+    const btn=document.getElementById('btn-confirmar-envio');
+    errorEl.style.display='none';
+    if (!alias&&!cbu) { errorEl.textContent='Ingresá alias o CBU.'; errorEl.style.display='block'; return; }
+    if (!monto||monto<=0) { errorEl.textContent='Monto inválido.'; errorEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Procesando...';
+    try {
+        const body={emisorId:usuarioId,monto,descripcion:desc||undefined,moneda:monedaModal.enviar};
+        if (alias) body.aliasDestino=alias; else body.cbuDestino=cbu;
+        const res=await fetch(`${BASE_URL}/api/transferencia`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        cerrarModal('modal-enviar');
+        await actualizarPantalla();
+        if (data.comprobante) mostrarComprobante(data.comprobante);
+        else toast(`✓ ${monedaModal.enviar==='USD'?'US$':'$'}${fmt(monto)} transferidos`,'success');
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+    finally { btn.disabled=false; btn.textContent='⚡ CONFIRMAR'; }
+}
+
+async function confirmarCarga() {
+    const monto=parseFloat(document.getElementById('cargar-monto').value);
+    const desc=document.getElementById('cargar-desc').value.trim();
+    const errorEl=document.getElementById('cargar-error');
+    const btn=document.getElementById('btn-confirmar-carga');
+    errorEl.style.display='none';
+    if (!monto||monto<=0) { errorEl.textContent='Monto inválido.'; errorEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Procesando...';
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/ingresar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({monto,descripcion:desc||undefined,moneda:monedaModal.cargar})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        cerrarModal('modal-cargar');
+        toast(`✓ ${monedaModal.cargar==='USD'?'US$':'$'}${fmt(monto)} acreditados`,'success');
+        await actualizarPantalla();
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+    finally { btn.disabled=false; btn.textContent='⚡ ACREDITAR'; }
+}
+
+async function confirmarPago() {
+    const servicio=document.getElementById('pagar-servicio').value;
+    const monto=parseFloat(document.getElementById('pagar-monto').value);
+    const desc=document.getElementById('pagar-desc').value.trim();
+    const errorEl=document.getElementById('pagar-error');
+    const btn=document.getElementById('btn-confirmar-pago');
+    errorEl.style.display='none';
+    if (!monto||monto<=0) { errorEl.textContent='Monto inválido.'; errorEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent='Procesando...';
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/pagar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({servicio,monto,descripcion:desc||undefined})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        cerrarModal('modal-pagar');
+        await actualizarPantalla();
+        if (data.comprobante) mostrarComprobante(data.comprobante);
+        else toast(`✓ ${servicio} pagado`,'success');
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+    finally { btn.disabled=false; btn.textContent='⚡ PAGAR'; }
+}
+
+// ══ ADMIN ══
+function switchAdminTab(tab) {
+    document.querySelectorAll('.admin-tab').forEach((t,i)=>t.classList.toggle('active',['usuarios','movimientos','central','deudores'][i]===tab));
+    document.querySelectorAll('.admin-panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById(`panel-${tab}`).classList.add('active');
+    if (tab==='central') cargarCentral();
+    if (tab==='deudores') cargarDeudoresAdmin();
+}
+
+async function cargarAdmin() {
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/usuarios`);
+        const us=await res.json();
+        const total=us.reduce((a,u)=>a+parseFloat(u.saldo),0);
+        document.getElementById('admin-stats').innerHTML=`
+            <div class="stat-card"><div class="stat-label">Usuarios</div><div class="stat-value">${us.length}</div><div class="stat-sub">Cuentas activas</div></div>
+            <div class="stat-card"><div class="stat-label">Saldo total</div><div class="stat-value" style="font-size:20px">$${fmt(total)}</div><div class="stat-sub">En el sistema</div></div>
+        `;
+        document.getElementById('tabla-usuarios').innerHTML=us.map(u=>`<tr>
+            <td>${u.id}</td>
+            <td><strong>${u.nombre} ${u.apellido}</strong><br><span style="font-size:10px;color:var(--muted)">${u.email||''}</span></td>
+            <td style="font-family:'Space Mono',monospace">${u.dni}</td>
+            <td style="font-size:10px;font-family:'Space Mono',monospace">${u.alias}</td>
+            <td style="font-family:'Space Mono',monospace"><strong>$${fmt(u.saldo)}</strong></td>
+            <td><span class="badge activo">${u.estado}</span></td>
+            <td><button onclick="eliminarUsuario(${u.id},'${u.nombre} ${u.apellido}')" style="background:rgba(224,49,49,.12);color:var(--red-text);border:1px solid rgba(224,49,49,.25);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Space Mono',monospace;white-space:nowrap">🗑 Borrar</button></td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/movimientos`);
+        const ms=await res.json();
+        document.getElementById('tabla-movimientos').innerHTML=ms.map(m=>{
+            const esIn=m.monto>0, clase=esIn?'in':'out';
+            const fecha=new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+            return `<tr><td style="font-size:10px;font-family:'Space Mono',monospace">${fecha}</td><td><strong>${m.nombre} ${m.apellido}</strong><br><span style="font-size:10px;color:var(--muted)">${m.alias}</span></td><td style="font-size:11px">${m.tipo}</td><td><span class="badge ${clase}">$${fmt(Math.abs(m.monto))}</span></td><td style="font-size:10px;color:var(--muted)">${m.detalle||''}${m.descripcion?'<br><em>'+m.descripcion+'</em>':''}</td></tr>`;
+        }).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function cargarCentral() {
+    try {
+        const [bRes,tRes,miBancoRes]=await Promise.all([
+            fetch(`${BASE_URL}/api/bancos`),
+            fetch(`${BASE_URL}/api/transacciones-central?minutos=1440`),
+            fetch(`${BASE_URL}/api/admin/banco`)
+        ]);
+        const bancos=await bRes.json(); const txs=await tRes.json();
+        const miBanco=await miBancoRes.json().catch(()=>({}));
+        document.getElementById('banco-nombre-actual').textContent = miBanco?.name || '-';
+        document.getElementById('tabla-bancos').innerHTML=(Array.isArray(bancos)?bancos:[]).map(b=>`<tr><td><span class="badge gold">#${b.bankCode}</span></td><td><strong>${b.name}</strong></td><td><span class="badge activo">${b.environment||'test'}</span></td></tr>`).join('');
+        document.getElementById('tabla-central').innerHTML=(Array.isArray(txs)?txs:[]).map(t=>{
+            const ok=t.estado==='aprobada', clase=ok?'in':'out';
+            const fecha=t.createdAt?new Date(t.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+            return `<tr><td><span class="badge ${clase}">${t.estado}</span></td><td style="font-size:10px">Banco #${t.bankCodeOrigen}<br>${t.personaOrigen?.nombre||''} ${t.personaOrigen?.apellido||''}</td><td style="font-size:10px">Banco #${t.bankCodeDestino}</td><td style="font-family:'Space Mono',monospace"><strong>$${fmt(t.importe)}</strong></td><td style="font-size:10px;color:var(--muted)">${fecha}</td></tr>`;
+        }).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Sin transacciones recientes</td></tr>';
+    } catch(e) { console.error(e); }
+}
+
+async function eliminarUsuario(id, nombre) {
+    if (!confirm(`⚠️ ¿Eliminar a ${nombre}?\nEsta acción borra la cuenta, movimientos y datos. No se puede deshacer.`)) return;
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/usuarios/${id}`,{method:'DELETE'});
+        const data=await res.json();
+        if (!res.ok) { toast('Error: '+(data.error||'No se pudo eliminar'),'error'); return; }
+        toast(`✓ ${nombre} eliminado`,'success');
+        cargarAdmin();
+    } catch { toast('Error de conexión','error'); }
+}
+
+// ══ ADMIN — RENOMBRAR BANCO ══
+async function renombrarBanco() {
+    const name=document.getElementById('banco-nombre-nuevo').value.trim();
+    const errorEl=document.getElementById('banco-nombre-error');
+    errorEl.style.display='none';
+    if (!name) { errorEl.textContent='Ingresá un nombre.'; errorEl.style.display='block'; return; }
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/banco`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        document.getElementById('banco-nombre-actual').textContent=name;
+        document.getElementById('banco-nombre-nuevo').value='';
+        toast('✓ Nombre del banco actualizado','success');
+        cargarCentral();
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+
+// ══ ADMIN — CENTRAL DE DEUDORES ══
+async function cargarDeudoresAdmin() {
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/deudores`);
+        const deudas=await res.json();
+        document.getElementById('tabla-deudores').innerHTML=(Array.isArray(deudas)?deudas:[]).map(d=>{
+            const clase=d.situacion<=2?'in':(d.situacion>=4?'out':'gold');
+            const fecha=d.fecha_informe?new Date(d.fecha_informe).toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'}):'';
+            return `<tr><td style="font-family:'Space Mono',monospace">${d.dni}</td><td><strong>${d.nombre} ${d.apellido}</strong></td><td style="font-family:'Space Mono',monospace">$${fmt(d.monto)}</td><td><span class="badge ${clase}">${d.situacion}</span></td><td style="font-size:10px;color:var(--muted)">${fecha}</td></tr>`;
+        }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Sin deudas informadas</td></tr>';
+    } catch(e) { console.error(e); }
+}
+
+async function consultarDeudorAdmin() {
+    const dni=document.getElementById('deuda-dni').value.trim();
+    const errorEl=document.getElementById('deuda-error');
+    const successEl=document.getElementById('deuda-success');
+    errorEl.style.display='none'; successEl.style.display='none';
+    if (!dni) { errorEl.textContent='Ingresá un DNI.'; errorEl.style.display='block'; return; }
+    try {
+        const res=await fetch(`${BASE_URL}/api/deudores/${dni}`);
+        const data=await res.json();
+        if (!res.ok) { successEl.textContent='Sin deudas informadas para ese DNI en la Central.'; successEl.style.display='block'; return; }
+        successEl.textContent=`Situación actual: ${data.situacion} · ${(data.deudas||[]).length} entidad(es) informaron deuda.`;
+        successEl.style.display='block';
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+
+async function informarDeuda() {
+    const dni=document.getElementById('deuda-dni').value.trim();
+    const monto=parseFloat(document.getElementById('deuda-monto').value);
+    const situacion=parseInt(document.getElementById('deuda-situacion').value);
+    const errorEl=document.getElementById('deuda-error');
+    const successEl=document.getElementById('deuda-success');
+    errorEl.style.display='none'; successEl.style.display='none';
+    if (!dni || isNaN(monto) || monto<0) { errorEl.textContent='Completá DNI y un monto válido.'; errorEl.style.display='block'; return; }
+    try {
+        const res=await fetch(`${BASE_URL}/api/admin/deudores`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dni,monto,situacion})});
+        const data=await res.json();
+        if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
+        successEl.textContent='✓ Deuda informada a la Central.'; successEl.style.display='block';
+        document.getElementById('deuda-monto').value=''; document.getElementById('deuda-dni').value='';
+        toast('✓ Deuda informada','success');
+        cargarDeudoresAdmin();
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+
+// ══ KEYBOARD ══
+document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
+document.getElementById('login-dni').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('login-pass').focus(); });
+document.getElementById('admin-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') loginAdmin(); });
+</script>
+</body>
+</html>

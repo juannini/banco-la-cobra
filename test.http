@@ -1,0 +1,109 @@
+### ══════════════════════════════════════
+### BANCO La Cobra — Test de endpoints
+### ══════════════════════════════════════
+
+### 1. Registrar Usuario (obtiene CBU oficial del Banco Central)
+POST http://localhost:3000/api/usuarios/registro
+Content-Type: application/json
+
+{
+    "nombre": "Juan",
+    "apellido": "Perez",
+    "dni": "12345678",
+    "email": "juan@mail.com"
+}
+
+###
+
+### 2. Registrar otro Usuario
+POST http://localhost:3000/api/usuarios/registro
+Content-Type: application/json
+
+{
+    "nombre": "Maria",
+    "apellido": "Garcia",
+    "dni": "87654321",
+    "email": "maria@mail.com"
+}
+
+###
+
+### 3. Ver datos y saldo del Usuario 1
+GET http://localhost:3000/api/usuarios/1
+
+###
+
+### 4. Ver datos y saldo del Usuario 2
+GET http://localhost:3000/api/usuarios/2
+
+###
+
+### 5. Ingresar dinero al Usuario 1
+POST http://localhost:3000/api/usuarios/1/ingresar
+Content-Type: application/json
+
+{
+    "monto": 100000
+}
+
+###
+
+### 6. Transferencia LOCAL por alias (mismo banco)
+POST http://localhost:3000/api/transferencia
+Content-Type: application/json
+
+{
+    "emisorId": 1,
+    "aliasDestino": "maria.garcia.boe",
+    "monto": 5000
+}
+
+###
+
+### 7. Transferencia INTERBANCARIA por CBU (reemplazar con CBU de otro banco)
+POST http://localhost:3000/api/transferencia
+Content-Type: application/json
+
+{
+    "emisorId": 1,
+    "cbuDestino": "CBU_DE_OTRO_BANCO_22_DIGITOS",
+    "monto": 1000
+}
+
+###
+
+### 8. Pagar servicio
+POST http://localhost:3000/api/usuarios/1/pagar
+Content-Type: application/json
+
+{
+    "servicio": "Electricidad (EPEC)",
+    "monto": 3500
+}
+
+###
+
+### 9. Ver todos los bancos registrados en el Central
+GET http://localhost:3000/api/bancos
+
+###
+
+### 10. Ver transacciones interbancarias (últimas 24hs)
+GET http://localhost:3000/api/transacciones-central?minutos=1440
+
+###
+
+### 11. Ver tabla de personas (debug)
+GET http://localhost:3000/api/tablas/personas
+
+###
+
+### 12. Ver tabla de cuentas bancarias (debug)
+GET http://localhost:3000/api/tablas/cuentas_bancarias
+
+###
+
+### 13. Ver movimientos (debug)
+GET http://localhost:3000/api/tablas/movimientos
+
+###
