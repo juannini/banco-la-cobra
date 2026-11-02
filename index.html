@@ -799,7 +799,7 @@
                         <div class="history-card">
                             <div class="history-header">
                                 <h3>Últimas actividades</h3>
-                                <button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button>
+                                <div style="display:flex;gap:14px;align-items:center"><button onclick="borrarActividad()" title="Borrar toda la actividad" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="ti ti-trash"></i> Borrar actividad</button><button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button></div>
                             </div>
                             <div id="historial-container"><p class="tx-empty">🐍 Cargando actividad...</p></div>
                         </div>
@@ -1012,7 +1012,7 @@
             <div class="comprobante-titulo">COMPROBANTE</div>
             <div class="comprobante-subtitulo" id="comp-subtitulo">BANCO LA COBRA</div>
         </div>
-        <div class="comprobante-monto"><span>$</span> <span id="comp-monto">0</span></div>
+        <div class="comprobante-monto"><span id="comp-simbolo">$</span> <span id="comp-monto">0</span></div>
         <div class="comprobante-datos" id="comp-datos"></div>
         <div class="comprobante-btns">
             <button class="btn-primary" onclick="descargarComprobante()">⬇ DESCARGAR</button>
@@ -1099,6 +1099,7 @@
         <div class="modal-handle"></div>
         <div class="modal-title">PAGAR SERVICIO</div>
         <p class="modal-subtitle">Aboná tus servicios desde acá</p>
+        <div class="field" id="pagar-moneda-field" style="display:none"><label>Pagar desde</label><div class="mon-switch" id="pagar-moneda-switch"></div></div>
         <div class="field"><label>Servicio</label><select id="pagar-servicio"><option>Electricidad (EPEC)</option><option>Gas (Naturgy)</option><option>Agua (AYSAM)</option><option>Internet (Telecentro)</option><option>Telefonía móvil</option></select></div>
         <div class="field"><label>Monto</label><input type="number" id="pagar-monto" placeholder="$ 0,00" min="1"></div>
         <div class="field"><label>Descripción (opcional)</label><textarea id="pagar-desc" placeholder="Ej: Factura noviembre..."></textarea></div>
@@ -1125,6 +1126,7 @@ function toast(msg, tipo='') { const t=document.getElementById('toast'); t.textC
 function abrirModal(id) {
     document.getElementById(id).classList.add('active');
     if (id === 'modal-cargar') inicializarSelectorMoneda('cargar');
+    if (id === 'modal-pagar') inicializarSelectorMoneda('pagar');
 }
 function cerrarModal(id) { document.getElementById(id).classList.remove('active'); }
 document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e=>{ if(e.target===o) o.classList.remove('active'); }));
@@ -1557,7 +1559,7 @@ function renderMobile(data) {
             <div class="side-card-body">${renderCuentas(data.cuentas)}</div>
         </div>
         <div class="history-card">
-            <div class="history-header"><h3>Actividad</h3><button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button></div>
+            <div class="history-header"><h3>Actividad</h3><div style="display:flex;gap:14px;align-items:center"><button onclick="borrarActividad()" title="Borrar toda la actividad" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="ti ti-trash"></i> Borrar actividad</button><button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button></div></div>
             <div id="historial-container">${renderHistorial(data.historial,'todos')}</div>
         </div>
     `;
@@ -1893,6 +1895,7 @@ async function abrirCajaUSD() {
 function mostrarComprobante(comp) {
     comprobanteActual=comp;
     document.getElementById('comp-subtitulo').textContent=comp.tipo?.toUpperCase()||'OPERACIÓN';
+    document.getElementById('comp-simbolo').textContent=comp.moneda==='USD'?'US$':'$';
     document.getElementById('comp-monto').textContent=fmt(comp.monto);
     const filas=[
         comp.emisor&&['Emisor',comp.emisor],
@@ -1929,7 +1932,7 @@ function descargarComprobante() {
         `Tipo:          ${c.tipo||'Operación'}`,
         `N° Comprobante: #${c.id||'-'}`,
         `Fecha:         ${c.fecha?new Date(c.fecha).toLocaleString('es-AR'):'-'}`,
-        '',`MONTO:         $ ${fmt(c.monto)}`,'',
+        '',`MONTO:         ${c.moneda==='USD'?'US$':'$'} ${fmt(c.monto)}`,'',
         c.emisor?`Emisor:        ${c.emisor}`:'',
         c.receptor?`Destinatario:  ${c.receptor}`:'',
         (c.alias||c.cbu)?`Alias/CBU:     ${c.alias||c.cbu}`:'',
@@ -1951,7 +1954,7 @@ function copiarCBU() { const c=obtenerCuentaActiva(); if(c?.cbu) copiarTexto(c.c
 
 // Moneda elegida dentro del modal de enviar / cargar (independiente de la moneda que se ve en el dashboard)
 // Moneda elegida dentro de cada modal/sección (enviar, cargar, alias) — independiente de monedaActiva
-const monedaModal = { enviar: 'ARS', cargar: 'ARS', alias: 'ARS' };
+const monedaModal = { enviar: 'ARS', cargar: 'ARS', alias: 'ARS', pagar: 'ARS' };
 
 // Pinta el switch ARS/USD dentro de un modal; se oculta si el usuario no tiene caja en USD
 function inicializarSelectorMoneda(modal) {
@@ -2050,6 +2053,17 @@ async function confirmarCarga() {
     finally { btn.disabled=false; btn.textContent='⚡ ACREDITAR'; }
 }
 
+async function borrarActividad() {
+    if (!confirm('¿Borrar toda tu actividad? No se puede deshacer.')) return;
+    try {
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/actividad`,{method:'DELETE'});
+        const data=await res.json();
+        if (!res.ok) { toast(data.error||'No se pudo borrar','error'); return; }
+        toast('✓ Actividad borrada','success');
+        await actualizarPantalla();
+    } catch { toast('Error de conexión','error'); }
+}
+
 async function confirmarPago() {
     const servicio=document.getElementById('pagar-servicio').value;
     const monto=parseFloat(document.getElementById('pagar-monto').value);
@@ -2060,7 +2074,7 @@ async function confirmarPago() {
     if (!monto||monto<=0) { errorEl.textContent='Monto inválido.'; errorEl.style.display='block'; return; }
     btn.disabled=true; btn.textContent='Procesando...';
     try {
-        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/pagar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({servicio,monto,descripcion:desc||undefined})});
+        const res=await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/pagar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({servicio,monto,descripcion:desc||undefined,moneda:monedaModal.pagar})});
         const data=await res.json();
         if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
         cerrarModal('modal-pagar');

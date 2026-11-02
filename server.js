@@ -403,7 +403,7 @@ app.get('/api/usuarios/:id', async (req, res) => {
             FROM Movimientos m
             JOIN Cuentas_Bancarias cb ON cb.id_cuenta = m.id_cuenta
             JOIN Productos pr ON pr.id_producto = cb.id_producto
-            WHERE pr.id_persona = $1
+            WHERE pr.id_persona = $1 AND m.oculto = FALSE
             ORDER BY m.fecha DESC LIMIT 30
         `, [idPersona]);
 
@@ -691,6 +691,7 @@ app.post('/api/transferencia', async (req, res) => {
 app.post('/api/usuarios/:id/pagar', async (req, res) => {
     const idPersona = parseInt(req.params.id);
     const { servicio, monto, descripcion } = req.body;
+    const moneda = req.body.moneda === 'USD' ? 'USD' : 'ARS';
     if (!monto || monto <= 0) return res.status(400).json({ error: "Monto inválido" });
 
     const client = await pool.connect();
@@ -699,10 +700,10 @@ app.post('/api/usuarios/:id/pagar', async (req, res) => {
         const cuentaResult = await client.query(`
             SELECT cb.id_cuenta, cb.saldo FROM Cuentas_Bancarias cb
             JOIN Productos pr ON pr.id_producto = cb.id_producto
-            WHERE pr.id_persona = $1 AND cb.moneda = 'ARS' LIMIT 1
-        `, [idPersona]);
+            WHERE pr.id_persona = $1 AND cb.moneda = $2 LIMIT 1
+        `, [idPersona, moneda]);
 
-        if (cuentaResult.rows.length === 0) return res.status(404).json({ error: "Cuenta no encontrada" });
+        if (cuentaResult.rows.length === 0) return res.status(404).json({ error: moneda === 'USD' ? "Todavía no abriste tu caja en USD" : "Cuenta no encontrada" });
         const cuenta = cuentaResult.rows[0];
         if (parseFloat(cuenta.saldo) < monto) return res.status(400).json({ error: "Saldo insuficiente" });
 
@@ -721,6 +722,7 @@ app.post('/api/usuarios/:id/pagar', async (req, res) => {
                 tipo: 'Pago de Servicio',
                 servicio,
                 monto,
+                moneda,
                 descripcion: descripcion || null,
                 fecha: new Date().toISOString()
             }
@@ -997,6 +999,26 @@ app.get('/api/tablas/:tabla', async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// BORRAR ACTIVIDAD (la oculta del historial del cliente; el panel admin conserva el registro)
+// ═══════════════════════════════════════════════════════════════════════════════
+app.delete('/api/usuarios/:id/actividad', async (req, res) => {
+    const idPersona = parseInt(req.params.id);
+    try {
+        const r = await pool.query(`
+            UPDATE Movimientos SET oculto = TRUE
+            WHERE oculto = FALSE AND id_cuenta IN (
+                SELECT cb.id_cuenta FROM Cuentas_Bancarias cb
+                JOIN Productos pr ON pr.id_producto = cb.id_producto
+                WHERE pr.id_persona = $1
+            )
+        `, [idPersona]);
+        res.json({ mensaje: 'Actividad borrada', borradas: r.rowCount });
+    } catch (err) {
+        res.status(500).json({ error: 'No se pudo borrar la actividad' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // POLLING
 // ═══════════════════════════════════════════════════════════════════════════════
 let pollingEnCurso = false;
@@ -1069,3 +1091,7 @@ app.listen(PORT, () => {
     console.log(`Banco Central: ${CENTRAL_ENV} | bankCode: ${BANK_CODE}`);
     setTimeout(procesarTransferenciasRecibidas, 3000);
 });
+
+// Columna para ocultar movimientos del historial del cliente (equivale a init/08_movimientos_oculto.sql)
+pool.query('ALTER TABLE Movimientos ADD COLUMN IF NOT EXISTS oculto BOOLEAN NOT NULL DEFAULT FALSE')
+    .catch(err => console.error('No se pudo agregar la columna oculto:', err.message));
