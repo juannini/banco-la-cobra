@@ -587,6 +587,25 @@
         #admin-content-panel.active { display: block; }
         #main-content-panel { display: block; }
         #main-content-panel.hidden { display: none; }
+        /* ── Cotización del dólar y Rendimientos ── */
+        .wdg-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+        .wdg-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:12px; }
+        .wdg-tabs .mon-pill { padding:4px 10px; font-size:10px; }
+        .cot-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .cot-val { font-family:'Bebas Neue',sans-serif; font-size:24px; color:var(--white); letter-spacing:.5px; }
+        .cot-meta { margin-top:10px; font-size:10px; color:var(--muted); font-family:'Space Mono',monospace; line-height:1.6; }
+        .cot-var { font-family:'Space Mono',monospace; font-size:10px; font-weight:700; padding:2px 8px; border-radius:100px; }
+        .cot-var.up { color:var(--green-text); background:rgba(105,219,124,.12); }
+        .cot-var.down { color:var(--red-text); background:rgba(255,107,107,.12); }
+        .cot-warn { color:var(--red-text); }
+        .rend-badge { font-family:'Space Mono',monospace; font-size:10px; font-weight:700; color:var(--gold); border:1px solid rgba(201,168,76,.35); border-radius:100px; padding:3px 10px; }
+        .rend-toggle { width:100%; margin-top:10px; background:none; border:1px solid rgba(var(--ink),.1); color:var(--gold); border-radius:var(--radius-sm); padding:9px; font-size:12px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; }
+        .rend-toggle:hover { border-color:var(--gold); }
+        .rend-list { margin-top:8px; max-height:260px; overflow-y:auto; }
+        .rend-row { display:grid; grid-template-columns:64px 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid rgba(var(--ink),.05); font-size:12px; }
+        .rend-row:last-child { border-bottom:none; }
+        .rend-row small { color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
+        .rend-row b { color:var(--green-text); font-family:'Space Mono',monospace; font-size:12px; }
     </style>
 </head>
 <body>
@@ -845,6 +864,10 @@
                             </div>
                             <div class="side-card-body" id="side-cuentas">-</div>
                         </div>
+
+                        <!-- Cotización del dólar y Rendimientos -->
+                        <div class="cot-slot"></div>
+                        <div class="rend-slot"></div>
 
                         <!-- Stats rápidas -->
                         <div class="side-card">
@@ -1509,6 +1532,7 @@ function renderDesktop(data) {
     // Mostrar
     document.getElementById('desktop-loading').style.display = 'none';
     document.getElementById('desktop-content').style.display = 'block';
+    pintarExtras();
 }
 
 async function actualizarPantallaDesktop() {
@@ -1558,6 +1582,8 @@ function renderMobile(data) {
             <div class="side-card-header"><div class="side-card-title">Mis cajas de ahorro</div></div>
             <div class="side-card-body">${renderCuentas(data.cuentas)}</div>
         </div>
+        <div class="cot-slot"></div>
+        <div class="rend-slot"></div>
         <div class="history-card">
             <div class="history-header"><h3>Actividad</h3><div style="display:flex;gap:14px;align-items:center"><button onclick="borrarActividad()" title="Borrar toda la actividad" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="ti ti-trash"></i> Borrar actividad</button><button onclick="actualizarPantalla()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px"><i class="ti ti-refresh"></i></button></div></div>
             <div id="historial-container">${renderHistorial(data.historial,'todos')}</div>
@@ -1565,6 +1591,7 @@ function renderMobile(data) {
     `;
     document.getElementById('mobile-loading').style.display = 'none';
     content.style.display = 'block';
+    pintarExtras();
 }
 
 async function actualizarPantallaMobile() {
@@ -1615,6 +1642,120 @@ function renderHistorial(h, filtro='todos') {
             <span class="tx-amount ${clase}">${esIn?'+':'-'}${(m.moneda==='USD'?'US$':'$')}${fmt(Math.abs(m.monto))}</span>
         </div>`;
     }).join('');
+}
+
+// ══ COTIZACIÓN DEL DÓLAR (MonedAPI, vía el backend) ══
+const escHtml = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtFechaAR = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleString('es-AR', { timeZone:'America/Argentina/Buenos_Aires', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }) : '-'; };
+const fmtDiaMes = iso => { const [y,m,d] = String(iso).split('-'); return `${d}/${m}`; };
+const COT_TIPOS = { oficial:'Oficial', blue:'Blue', bolsa:'MEP', ccl:'CCL' };
+const COT_REFRESCO_MS = 60 * 1000;
+let cotTipo = 'oficial', cotDatos = null, cotError = false, cotPedidoEn = 0;
+
+function htmlCotizacion() {
+    const tabs = Object.entries(COT_TIPOS).map(([k,v]) => `<button class="mon-pill ${k===cotTipo?'active':''}" onclick="cambiarCotTipo('${k}')">${v}</button>`).join('');
+    let cuerpo;
+    if (!cotDatos) {
+        cuerpo = `<p class="tx-empty">${cotError ? 'No se pudo obtener la cotización.' : 'Cargando cotización...'}</p>`;
+    } else {
+        const v = cotDatos.variacion;
+        const badge = v ? `<span class="cot-var ${v.porcentaje < 0 ? 'down' : 'up'}">${v.porcentaje > 0 ? '+' : ''}${fmt(v.porcentaje)}%</span>` : '';
+        cuerpo = `
+            <div class="cot-grid">
+                <div class="stat-chip"><div class="stat-chip-label">Compra</div><div class="cot-val">$${fmt(cotDatos.compra)}</div></div>
+                <div class="stat-chip"><div class="stat-chip-label">Venta</div><div class="cot-val">$${fmt(cotDatos.venta)}</div></div>
+            </div>
+            <div class="cot-meta">
+                <div style="display:flex;justify-content:space-between;align-items:center">${escHtml(cotDatos.nombre)} · pesos por US$ ${badge}</div>
+                <div>Actualizado: ${fmtFechaAR(cotDatos.actualizado)}</div>
+                <div>Verificado: ${fmtFechaAR(cotDatos.verificado)}</div>
+                ${(cotDatos.desactualizada || cotError) ? '<div class="cot-warn">⚠ No se pudo refrescar; se muestra el último valor conocido.</div>' : '<div>Se actualiza sola cada 1 min · Fuente: MonedAPI</div>'}
+            </div>`;
+    }
+    return `<div class="side-card">
+        <div class="side-card-header wdg-head"><div class="side-card-title">💵 Cotización del dólar</div></div>
+        <div class="side-card-body"><div class="wdg-tabs">${tabs}</div>${cuerpo}</div>
+    </div>`;
+}
+function pintarCotizacion() { document.querySelectorAll('.cot-slot').forEach(el => { el.innerHTML = htmlCotizacion(); }); }
+
+async function cargarCotizacion() {
+    const tipo = cotTipo;
+    cotPedidoEn = Date.now();
+    try {
+        const res = await fetch(`${BASE_URL}/api/cotizacion/dolar?tipo=${tipo}`);
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Error');
+        if (tipo !== cotTipo) return; // el usuario cambió de pestaña mientras tanto
+        cotDatos = d; cotError = false;
+    } catch {
+        if (tipo !== cotTipo) return;
+        cotError = true;
+        if (cotDatos && cotDatos.tipo !== tipo) cotDatos = null;
+    }
+    pintarCotizacion();
+}
+function cambiarCotTipo(tipo) {
+    if (tipo === cotTipo) return;
+    cotTipo = tipo; cotDatos = null; cotError = false;
+    pintarCotizacion();
+    cargarCotizacion();
+}
+// Actualización automática: cada minuto mientras la pestaña esté visible y haya sesión iniciada
+setInterval(() => { if (usuarioId && !document.hidden) cargarCotizacion(); }, COT_REFRESCO_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && usuarioId && Date.now() - cotPedidoEn > COT_REFRESCO_MS) cargarCotizacion(); });
+
+// ══ RENDIMIENTOS (los intereses los calcula y acredita el backend) ══
+const rendDatos = {}; // moneda -> respuesta de /rendimientos
+let rendAbierto = false;
+
+function htmlRendimientos() {
+    const mon = monedaActiva, d = rendDatos[mon], sim = mon === 'USD' ? 'US$' : '$';
+    let cuerpo;
+    if (!d) cuerpo = '<p class="tx-empty">Cargando rendimientos...</p>';
+    else if (d.error) cuerpo = `<p class="tx-empty">${escHtml(d.error)}</p>`;
+    else {
+        const filas = d.diarios.length
+            ? d.diarios.map(r => `<div class="rend-row"><span>${fmtDiaMes(r.fecha)}</span><small>sobre ${sim}${fmt(r.saldoBase)} · TNA ${fmt(r.tasaAnual)}%</small><b>+${sim}${fmt(r.interes)}</b></div>`).join('')
+            : '<p class="tx-empty">Todavía no se acreditaron intereses. El primero llega cuando termine el día.</p>';
+        cuerpo = `
+            <div class="stat-chips">
+                <div class="stat-chip"><div class="stat-chip-label">Ganancia acumulada</div><div class="stat-chip-value" style="font-size:20px;color:var(--green-text)">+${sim}${fmt(d.acumulado)}</div></div>
+                <div class="stat-chip"><div class="stat-chip-label">Este mes</div><div class="stat-chip-value" style="font-size:20px;color:var(--green-text)">+${sim}${fmt(d.acumuladoMes)}</div></div>
+                <div class="stat-chip"><div class="stat-chip-label">Hoy rendirías (aprox.)</div><div class="stat-chip-value" style="font-size:18px">${sim}${fmt(d.estimadoDiario)}</div></div>
+                <div class="stat-chip"><div class="stat-chip-label">Tasa diaria</div><div class="stat-chip-value" style="font-size:18px">${d.tasaDiaria.toFixed(4).replace('.', ',')}%</div></div>
+            </div>
+            <button class="rend-toggle" onclick="alternarHistorialRend()">${rendAbierto ? 'Ocultar historial' : 'Ver historial diario (últimos ' + d.diasConsultados + ' días)'}</button>
+            ${rendAbierto ? `<div class="rend-list">${filas}</div>` : ''}
+            <div class="cot-meta">Los intereses se calculan sobre tu saldo disponible y se acreditan al terminar cada día.</div>`;
+    }
+    const tasa = d && !d.error ? `<span class="rend-badge">TNA ${fmt(d.tasaAnual)}%</span>` : '';
+    return `<div class="side-card">
+        <div class="side-card-header wdg-head"><div class="side-card-title">📈 Rendimientos · ${mon}</div>${tasa}</div>
+        <div class="side-card-body">${cuerpo}</div>
+    </div>`;
+}
+function pintarRendimientos() { document.querySelectorAll('.rend-slot').forEach(el => { el.innerHTML = htmlRendimientos(); }); }
+function alternarHistorialRend() { rendAbierto = !rendAbierto; pintarRendimientos(); }
+
+async function cargarRendimientos() {
+    if (!usuarioId) return;
+    const mon = monedaActiva;
+    try {
+        const res = await fetch(`${BASE_URL}/api/usuarios/${usuarioId}/rendimientos?moneda=${mon}&dias=30`);
+        const d = await res.json();
+        rendDatos[mon] = res.ok ? d : { error: d.error || 'No se pudieron obtener los rendimientos' };
+    } catch { rendDatos[mon] = { error: 'No se pudieron obtener los rendimientos' }; }
+    if (mon === monedaActiva) pintarRendimientos();
+}
+
+// Se llama al final de renderDesktop / renderMobile: muestra lo último que se sabe y pide datos frescos
+function pintarExtras() {
+    if (rendDatos.__uid !== usuarioId) { Object.keys(rendDatos).forEach(k => delete rendDatos[k]); rendDatos.__uid = usuarioId; rendAbierto = false; } // otra sesión: no mostrar datos del usuario anterior
+    pintarCotizacion();
+    pintarRendimientos();
+    if (!cotDatos || Date.now() - cotPedidoEn > COT_REFRESCO_MS / 2) cargarCotizacion();
+    cargarRendimientos();
 }
 
 // ══ SIDEBAR NAV ══

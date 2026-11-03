@@ -86,6 +86,8 @@ pool.connect((err, client, release) => {
     // Foto de perfil: se agrega la columna sola si todavía no existe (equivale a init/06_foto_perfil.sql)
     client.query('ALTER TABLE Personas ADD COLUMN IF NOT EXISTS foto TEXT')
         .then(() => client.query(SQL_TARJETAS))
+        .then(() => client.query(SQL_RENDIMIENTOS))
+        .then(() => setTimeout(devengarRendimientos, 2000))
         .catch(e => console.error('No se pudo preparar la columna foto:', e.message))
         .finally(() => release());
 });
@@ -1017,6 +1019,204 @@ app.delete('/api/usuarios/:id/actividad', async (req, res) => {
         res.status(500).json({ error: 'No se pudo borrar la actividad' });
     }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COTIZACIÓN DEL DÓLAR (MonedAPI — https://monedapi.ar)
+// ═══════════════════════════════════════════════════════════════════════════════
+const MONEDAPI_URL = process.env.MONEDAPI_URL || 'https://monedapi.ar/api/v2';
+const COTIZACION_TTL_MS = 60 * 1000; // MonedAPI publica cada 5 min y cachea 60 s: no tiene sentido preguntar más seguido
+const TIPOS_DOLAR = { oficial: 'Dólar Oficial', blue: 'Dólar Blue', bolsa: 'Dólar MEP', ccl: 'Contado con liqui', bna: 'Dólar Banco Nación', tarjeta: 'Dólar tarjeta' };
+const cacheCotizacion = new Map(); // tipo -> { datos, obtenidoEn }
+
+async function pedirCotizacion(tipo) {
+    const fetch = (await import('node-fetch')).default;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+        const r = await fetch(`${MONEDAPI_URL}/usd/${tipo}`, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+        if (!r.ok) throw new Error(`MonedAPI respondió ${r.status}`);
+        const d = await r.json();
+        if (typeof d.buy !== 'number' || typeof d.sell !== 'number') throw new Error('Respuesta inesperada de MonedAPI');
+        return {
+            tipo,
+            nombre: d.name || TIPOS_DOLAR[tipo],
+            compra: d.buy,
+            venta: d.sell,
+            actualizado: d.updatedAt,       // última vez que cambió el valor (hora argentina)
+            verificado: d.lastScrapedAt,    // última vez que una fuente lo confirmó
+            variacion: d.change ? { monto: d.change.amount, porcentaje: d.change.percent } : null,
+            fuente: 'MonedAPI'
+        };
+    } finally { clearTimeout(timer); }
+}
+
+app.get('/api/cotizacion/dolar', async (req, res) => {
+    const tipo = String(req.query.tipo || 'oficial').toLowerCase();
+    if (!TIPOS_DOLAR[tipo]) return res.status(400).json({ error: `Tipo inválido. Usá: ${Object.keys(TIPOS_DOLAR).join(', ')}` });
+
+    const guardado = cacheCotizacion.get(tipo);
+    if (guardado && Date.now() - guardado.obtenidoEn < COTIZACION_TTL_MS) return res.json({ ...guardado.datos, desactualizada: false });
+
+    try {
+        const datos = await pedirCotizacion(tipo);
+        cacheCotizacion.set(tipo, { datos, obtenidoEn: Date.now() });
+        res.json({ ...datos, desactualizada: false });
+    } catch (err) {
+        console.error('Error consultando MonedAPI:', err.message);
+        // Si falló pero hay un valor previo, se sirve ese marcándolo como desactualizado (con su fecha original)
+        if (guardado) return res.json({ ...guardado.datos, desactualizada: true });
+        res.status(503).json({ error: 'No se pudo obtener la cotización en este momento' });
+    }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDIMIENTOS (intereses diarios sobre el saldo disponible)
+// ═══════════════════════════════════════════════════════════════════════════════
+// TNA (%) por moneda. Configurable en .env: RENDIMIENTO_TNA_ARS, RENDIMIENTO_TNA_USD
+const leerTasa = (v, porDefecto) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 && n <= 1000 ? n : porDefecto; };
+const TASAS_ANUALES = {
+    ARS: leerTasa(process.env.RENDIMIENTO_TNA_ARS, 30),
+    USD: leerTasa(process.env.RENDIMIENTO_TNA_USD, 1)
+};
+const DIAS_AÑO = 365;
+const MAX_DIAS_ATRASO = 31; // tope de días que se recuperan si el servidor estuvo apagado
+
+const SQL_RENDIMIENTOS = `CREATE TABLE IF NOT EXISTS Rendimientos (
+    id_rendimiento SERIAL PRIMARY KEY,
+    id_cuenta INTEGER NOT NULL REFERENCES Cuentas_Bancarias(id_cuenta) ON DELETE CASCADE,
+    fecha DATE NOT NULL,
+    saldo_base DECIMAL(15, 2) NOT NULL,
+    tasa_anual DECIMAL(7, 4) NOT NULL,
+    interes DECIMAL(15, 2) NOT NULL CHECK (interes >= 0),
+    creado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (id_cuenta, fecha)
+)`;
+
+// Fecha de hoy en Argentina como 'YYYY-MM-DD' (independiente de la zona horaria del servidor)
+function fechaArgentina(desplazarDias = 0) {
+    const base = new Date(Date.now() + desplazarDias * 86400000);
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(base);
+}
+function sumarDias(fechaISO, dias) {
+    const d = new Date(fechaISO + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + dias);
+    return d.toISOString().slice(0, 10);
+}
+
+// Devenga UN día en UNA caja. El interés se calcula en la base con NUMERIC (sin errores de coma flotante):
+//   interés = saldo × TNA% / 100 / 365, redondeado a centavos. Se acredita al saldo y queda como movimiento.
+async function devengarDia(idCuenta, moneda, fecha) {
+    const tna = TASAS_ANUALES[moneda];
+    if (tna === undefined) return false;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const c = await client.query('SELECT saldo FROM Cuentas_Bancarias WHERE id_cuenta = $1 FOR UPDATE', [idCuenta]);
+        if (c.rows.length === 0) { await client.query('ROLLBACK'); return false; }
+        const calc = await client.query('SELECT ROUND($1::numeric * $2::numeric / 100 / $3::numeric, 2) AS interes', [c.rows[0].saldo, tna, DIAS_AÑO]);
+        const interes = calc.rows[0].interes;
+
+        // UNIQUE (id_cuenta, fecha): si ya estaba devengado ese día, no inserta y no acredita nada
+        const ins = await client.query(
+            `INSERT INTO Rendimientos (id_cuenta, fecha, saldo_base, tasa_anual, interes) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id_cuenta, fecha) DO NOTHING RETURNING id_rendimiento`,
+            [idCuenta, fecha, c.rows[0].saldo, tna, interes]);
+
+        if (ins.rows.length > 0 && parseFloat(interes) > 0) {
+            await client.query('UPDATE Cuentas_Bancarias SET saldo = saldo + $1 WHERE id_cuenta = $2', [interes, idCuenta]);
+            await client.query(
+                `INSERT INTO Movimientos (id_cuenta, tipo, monto, detalle) VALUES ($1, 'Rendimiento diario', $2, $3)`,
+                [idCuenta, interes, `Intereses del ${fecha} · TNA ${tna}%`]);
+        }
+        await client.query('COMMIT');
+        return ins.rows.length > 0;
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error(`Error devengando cuenta ${idCuenta} (${fecha}):`, err.message);
+        return false;
+    } finally { client.release(); }
+}
+
+let devengandoEnCurso = false;
+let ultimoDiaDevengado = null;
+
+// Recorre todas las cajas y devenga los días que falten hasta AYER (un día se devenga recién cuando termina).
+async function devengarRendimientos() {
+    if (devengandoEnCurso) return;
+    devengandoEnCurso = true;
+    try {
+        const hoy = fechaArgentina();
+        const ayer = sumarDias(hoy, -1);
+        const { rows } = await pool.query(`
+            SELECT cb.id_cuenta, cb.moneda,
+                   (SELECT MAX(r.fecha) FROM Rendimientos r WHERE r.id_cuenta = cb.id_cuenta)::text AS ultimo,
+                   pr.fecha_alta::date::text AS alta
+            FROM Cuentas_Bancarias cb JOIN Productos pr ON pr.id_producto = cb.id_producto
+        `);
+        let acreditados = 0;
+        for (const cb of rows) {
+            let desde;
+            if (cb.ultimo) desde = sumarDias(cb.ultimo, 1);
+            else if (cb.alta < ayer) desde = ayer;      // primera vez: solo ayer, y solo si la caja ya existía antes de ese día
+            else continue;
+            const tope = sumarDias(ayer, -(MAX_DIAS_ATRASO - 1));
+            if (desde < tope) desde = tope;
+            for (let f = desde; f <= ayer; f = sumarDias(f, 1)) {
+                if (await devengarDia(cb.id_cuenta, cb.moneda, f)) acreditados++;
+            }
+        }
+        ultimoDiaDevengado = hoy;
+        if (acreditados) console.log(`✓ Rendimientos devengados: ${acreditados} (hasta ${ayer})`);
+    } catch (err) {
+        console.error('Error devengando rendimientos:', err.message);
+    } finally { devengandoEnCurso = false; }
+}
+
+// Cada minuto revisa si cambió el día (hora argentina); si cambió, devenga el día que terminó
+setInterval(() => { if (fechaArgentina() !== ultimoDiaDevengado) devengarRendimientos(); }, 60 * 1000);
+
+app.get('/api/usuarios/:id/rendimientos', async (req, res) => {
+    const idPersona = parseInt(req.params.id);
+    const moneda = req.query.moneda === 'USD' ? 'USD' : 'ARS';
+    const dias = Math.min(Math.max(parseInt(req.query.dias) || 30, 1), 365);
+    if (!Number.isInteger(idPersona)) return res.status(400).json({ error: 'Usuario inválido' });
+    try {
+        const cuenta = await pool.query(`
+            SELECT cb.id_cuenta, cb.saldo FROM Cuentas_Bancarias cb
+            JOIN Productos pr ON pr.id_producto = cb.id_producto
+            WHERE pr.id_persona = $1 AND cb.moneda = $2 LIMIT 1
+        `, [idPersona, moneda]);
+        if (cuenta.rows.length === 0) return res.status(404).json({ error: moneda === 'USD' ? 'Todavía no abriste tu caja en USD' : 'Cuenta no encontrada' });
+        const { id_cuenta, saldo } = cuenta.rows[0];
+        const tna = TASAS_ANUALES[moneda];
+
+        const [total, mes, diarios, estimado] = await Promise.all([
+            pool.query('SELECT COALESCE(SUM(interes), 0) AS total, COUNT(*) AS dias FROM Rendimientos WHERE id_cuenta = $1', [id_cuenta]),
+            pool.query(`SELECT COALESCE(SUM(interes), 0) AS total FROM Rendimientos
+                        WHERE id_cuenta = $1 AND fecha >= date_trunc('month', $2::date)`, [id_cuenta, fechaArgentina()]),
+            pool.query(`SELECT fecha::text AS fecha, saldo_base, tasa_anual, interes FROM Rendimientos
+                        WHERE id_cuenta = $1 AND fecha >= $2::date - $3::int ORDER BY fecha DESC`, [id_cuenta, fechaArgentina(), dias]),
+            pool.query('SELECT ROUND($1::numeric * $2::numeric / 100 / $3::numeric, 2) AS interes', [saldo, tna, DIAS_AÑO])
+        ]);
+
+        res.json({
+            moneda,
+            saldo: parseFloat(saldo),
+            tasaAnual: tna,                                                // TNA (%)
+            tasaDiaria: parseFloat((tna / DIAS_AÑO).toFixed(6)),           // % por día
+            estimadoDiario: parseFloat(estimado.rows[0].interes),          // lo que rendiría hoy el saldo actual
+            acumulado: parseFloat(total.rows[0].total),                    // ganancias desde siempre
+            acumuladoMes: parseFloat(mes.rows[0].total),
+            diasAcreditados: parseInt(total.rows[0].dias),
+            diarios: diarios.rows.map(r => ({ fecha: r.fecha, saldoBase: parseFloat(r.saldo_base), tasaAnual: parseFloat(r.tasa_anual), interes: parseFloat(r.interes) })),
+            diasConsultados: dias
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'No se pudieron obtener los rendimientos' });
+    }
+});
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // POLLING
