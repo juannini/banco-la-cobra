@@ -35,7 +35,7 @@ const SITUACION_MAXIMA_ALTA = 3; // situación crediticia máxima para abrir cue
 const nombresBancos = new Map(); // caché bankCode -> nombre
 
 // Almacén de códigos de verificación en memoria
-const codigosVerificacion = new Map(); // key: email, value: { codigo, expira, tipo }
+const codigosVerificacion = new Map(); // key: email (minúsculas), value: { hash, salt, expira, tipo, intentos, enviadoEn }
 
 // Tarjeta de débito virtual: una por persona y moneda (equivale a init/07_tarjetas_debito.sql)
 const SQL_TARJETAS = `CREATE TABLE IF NOT EXISTS Tarjetas_Debito (
@@ -141,39 +141,188 @@ async function asignarAliasCentral(cbu, nombre, apellido, dni) {
     return null;
 }
 
-function generarCodigo() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFICACIÓN POR CORREO (códigos de 6 dígitos enviados con Resend — https://resend.com)
+// ═══════════════════════════════════════════════════════════════════════════════
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_URL = process.env.RESEND_URL || 'https://api.resend.com/emails';
+// Con el remitente de prueba (onboarding@resend.dev) Resend solo entrega al correo dueño de la cuenta.
+// Para enviar a correos reales hay que verificar un dominio propio y usar un remitente de ese dominio.
+const MAIL_FROM = process.env.MAIL_FROM || 'Banco La Cobra <onboarding@resend.dev>';
+
+const enteroEnRango = (v, porDefecto, min, max) => { const n = parseInt(v); return Number.isInteger(n) && n >= min && n <= max ? n : porDefecto; };
+const CODIGO_TTL_MIN           = enteroEnRango(process.env.CODIGO_TTL_MIN, 10, 1, 60);          // vencimiento
+const CODIGO_MAX_INTENTOS      = enteroEnRango(process.env.CODIGO_MAX_INTENTOS, 5, 1, 10);      // intentos fallidos por código
+const CODIGO_REENVIO_SEG       = enteroEnRango(process.env.CODIGO_REENVIO_SEG, 60, 10, 600);    // espera mínima entre envíos
+const CODIGO_MAX_ENVIOS_HORA   = enteroEnRango(process.env.CODIGO_MAX_ENVIOS_HORA, 5, 1, 50);   // envíos por email por hora
+const CODIGO_MAX_ENVIOS_IP_HORA = enteroEnRango(process.env.CODIGO_MAX_ENVIOS_IP_HORA, 15, 1, 200); // envíos por IP por hora
+const TIPOS_CODIGO = new Set(['registro', 'password']);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+if (RESEND_API_KEY) console.log(`✉  Resend configurado. Remitente: ${MAIL_FROM}`);
+else console.warn('⚠  RESEND_API_KEY no configurada: los códigos NO se envían por correo, se imprimen en esta consola (solo desarrollo).');
+
+const enviosPorEmail = new Map(); // email -> [timestamps de envíos de la última hora]
+const enviosPorIp = new Map();    // ip    -> [timestamps de envíos de la última hora]
+
+class ErrorVerificacion extends Error {
+    constructor(status, mensaje, extra = {}) { super(mensaje); this.status = status; this.extra = extra; }
+}
+const responderErrorVerificacion = (res, err) => res.status(err.status).json({ error: err.message, ...err.extra });
+
+function normalizarEmail(valor) {
+    const e = String(valor ?? '').trim().toLowerCase();
+    return e.length <= 254 && EMAIL_REGEX.test(e) ? e : null;
 }
 
-async function enviarCodigo(email, tipo) {
-    const codigo = generarCodigo();
-    const expira = Date.now() + 10 * 60 * 1000; // 10 minutos
-    codigosVerificacion.set(email, { codigo, expira, tipo });
-    // OPCIÓN B: código simulado, se muestra en consola
-    console.log(`\n🐍 CÓDIGO DE VERIFICACIÓN para ${email}: ${codigo} (expira en 10 min)\n`);
-    return codigo;
+// 6 dígitos con generador criptográfico (puede empezar con 0)
+function generarCodigo() {
+    return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
+const hashCodigo = (codigo, salt) => crypto.createHash('sha256').update(salt + codigo).digest();
+
+function enviosRecientes(mapa, clave, ahora) {
+    const lista = (mapa.get(clave) || []).filter(t => ahora - t < 3600 * 1000);
+    mapa.set(clave, lista);
+    return lista;
+}
+
+function plantillaCodigo(codigo, tipo) {
+    const accion = tipo === 'registro' ? 'crear tu cuenta' : 'cambiar tu contraseña';
+    const asunto = tipo === 'registro' ? 'Tu código para crear tu cuenta en Banco La Cobra' : 'Tu código para cambiar tu contraseña en Banco La Cobra';
+    const html = `<!DOCTYPE html><html lang="es"><body style="margin:0;padding:24px;background:#f4f1ea;font-family:Arial,Helvetica,sans-serif;color:#1c1a15">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;background:#ffffff;border-radius:14px;border:1px solid #e3dccb">
+<tr><td style="padding:26px 28px 6px;font-size:20px;font-weight:700;letter-spacing:2px;color:#8a6a1e">🐍 BANCO LA COBRA</td></tr>
+<tr><td style="padding:8px 28px 0;font-size:15px;line-height:1.5">Usá este código para ${accion}:</td></tr>
+<tr><td align="center" style="padding:18px 28px"><div style="display:inline-block;padding:14px 26px;border-radius:10px;background:#f4f1ea;font-family:'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:8px;color:#1c1a15">${codigo}</div></td></tr>
+<tr><td style="padding:0 28px 6px;font-size:13px;line-height:1.5;color:#6a665b">El código vence en ${CODIGO_TTL_MIN} minutos y se puede usar una sola vez.</td></tr>
+<tr><td style="padding:0 28px 26px;font-size:13px;line-height:1.5;color:#6a665b">Si no lo pediste vos, ignorá este mensaje: nadie puede entrar a tu cuenta sin el código. El banco nunca te va a pedir este código por teléfono ni por chat.</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `Banco La Cobra\n\nUsá este código para ${accion}: ${codigo}\n\nVence en ${CODIGO_TTL_MIN} minutos y se puede usar una sola vez.\nSi no lo pediste vos, ignorá este mensaje. El banco nunca te va a pedir este código por teléfono ni por chat.`;
+    return { asunto, html, text };
+}
+
+const esperarMs = ms => new Promise(r => setTimeout(r, ms));
+
+// Envía un correo con la API de Resend. Reintenta una vez ante error de red, límite de velocidad (429) o error 5xx.
+// El mismo Idempotency-Key en ambos intentos evita que el reintento duplique el correo.
+async function enviarMail({ to, subject, html, text }) {
+    if (!RESEND_API_KEY) {
+        console.log(`\n🐍 [DESARROLLO] Correo a ${to} — ${subject}\n${text}\n`);
+        return { simulado: true };
+    }
+    const fetch = (await import('node-fetch')).default;
+    const idempotencyKey = `cobra-${crypto.randomUUID()}`;
+    let ultimoError;
+    for (let intento = 1; intento <= 2; intento++) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 10000);
+        try {
+            const r = await fetch(RESEND_URL, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+                body: JSON.stringify({ from: MAIL_FROM, to: [to], subject, html, text }),
+                signal: ctrl.signal
+            });
+            const datos = await r.json().catch(() => ({}));
+            if (r.ok) return datos;
+            ultimoError = new Error(`Resend respondió ${r.status}: ${datos.message || datos.name || 'sin detalle'}`);
+            ultimoError.status = r.status;
+            if (r.status === 403 && /resend\.dev/.test(MAIL_FROM)) console.error('   ↳ Con onboarding@resend.dev solo se puede enviar al correo dueño de la cuenta de Resend. Verificá un dominio y configurá MAIL_FROM.');
+            if (!(r.status === 429 || r.status >= 500) || intento === 2) throw ultimoError;
+            await esperarMs(r.status === 429 ? 1000 : 500);
+        } catch (err) {
+            if (err === ultimoError) throw err;            // error HTTP ya decidido arriba
+            ultimoError = err;                              // error de red o timeout
+            if (intento === 2) throw err;
+        } finally { clearTimeout(timer); }
+    }
+    throw ultimoError;
+}
+
+// Genera, guarda (solo el hash) y envía un código. Aplica espera entre envíos y límites por email e IP.
+async function solicitarCodigo(email, tipo, ip) {
+    const ahora = Date.now();
+    const previo = codigosVerificacion.get(email);
+    if (previo) {
+        const falta = Math.ceil((previo.enviadoEn + CODIGO_REENVIO_SEG * 1000 - ahora) / 1000);
+        if (falta > 0) throw new ErrorVerificacion(429, `Esperá ${falta} segundos para pedir otro código.`, { esperar: falta });
+    }
+    const delEmail = enviosRecientes(enviosPorEmail, email, ahora);
+    if (delEmail.length >= CODIGO_MAX_ENVIOS_HORA)
+        throw new ErrorVerificacion(429, 'Pediste demasiados códigos para este email. Probá de nuevo en una hora.');
+    const delIp = enviosRecientes(enviosPorIp, ip || 'desconocida', ahora);
+    if (delIp.length >= CODIGO_MAX_ENVIOS_IP_HORA)
+        throw new ErrorVerificacion(429, 'Demasiados pedidos de código desde tu conexión. Probá de nuevo más tarde.');
+
+    const codigo = generarCodigo();
+    const salt = crypto.randomBytes(8).toString('hex');
+    const entrada = { hash: hashCodigo(codigo, salt), salt, expira: ahora + CODIGO_TTL_MIN * 60 * 1000, tipo, intentos: 0, enviadoEn: ahora };
+    codigosVerificacion.set(email, entrada); // el código anterior queda invalidado (no hay await entre el chequeo y esta línea)
+    delEmail.push(ahora); delIp.push(ahora);  // cuenta aunque el envío falle, para no martillar a Resend
+
+    const { asunto, html, text } = plantillaCodigo(codigo, tipo);
+    try {
+        await enviarMail({ to: email, subject: asunto, html, text });
+    } catch (err) {
+        console.error('Error al enviar el código por email:', err.message);
+        // No dejar vigente un código que nadie recibió
+        if (codigosVerificacion.get(email) === entrada) previo ? codigosVerificacion.set(email, previo) : codigosVerificacion.delete(email);
+        throw new ErrorVerificacion(502, 'No se pudo enviar el email. Probá de nuevo en unos minutos.');
+    }
+}
+
+// Verifica el código. Lanza ErrorVerificacion si no corresponde. Con consumir=false el código sigue vigente
+// (se usa en el registro: si falla otra validación, el usuario no tiene que pedir un código nuevo).
+function verificarCodigo(email, tipo, ingresado, consumir = true) {
+    const e = email ? codigosVerificacion.get(email) : null;
+    if (!e || e.tipo !== tipo) throw new ErrorVerificacion(400, 'No se envió un código a este email. Solicitá uno primero.');
+    if (Date.now() > e.expira) { codigosVerificacion.delete(email); throw new ErrorVerificacion(400, 'El código expiró. Solicitá uno nuevo.'); }
+    const texto = String(ingresado ?? '').trim();
+    if (!/^\d{6}$/.test(texto)) throw new ErrorVerificacion(400, 'El código tiene 6 dígitos.');
+
+    if (!crypto.timingSafeEqual(hashCodigo(texto, e.salt), e.hash)) {
+        e.intentos++;
+        const quedan = CODIGO_MAX_INTENTOS - e.intentos;
+        if (quedan <= 0) { codigosVerificacion.delete(email); throw new ErrorVerificacion(429, 'Superaste el límite de intentos. Solicitá un código nuevo.'); }
+        throw new ErrorVerificacion(400, `Código incorrecto. Te quedan ${quedan} intento${quedan === 1 ? '' : 's'}.`);
+    }
+    if (consumir) codigosVerificacion.delete(email);
+}
+
+// Limpieza periódica para que los mapas en memoria no crezcan indefinidamente
+setInterval(() => {
+    const ahora = Date.now();
+    for (const [k, v] of codigosVerificacion) if (ahora > v.expira + 60 * 1000) codigosVerificacion.delete(k);
+    for (const mapa of [enviosPorEmail, enviosPorIp])
+        for (const [k, lista] of mapa) { const vivos = lista.filter(t => ahora - t < 3600 * 1000); vivos.length ? mapa.set(k, vivos) : mapa.delete(k); }
+}, 5 * 60 * 1000).unref();
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ENVIAR CÓDIGO DE VERIFICACIÓN
+// ENVIAR CÓDIGO DE VERIFICACIÓN (también sirve para reenviar)
 // ═══════════════════════════════════════════════════════════════════════════════
 app.post('/api/verificacion/enviar', async (req, res) => {
-    const { email, tipo } = req.body;
-    if (!email || !tipo) return res.status(400).json({ error: 'Email y tipo requeridos' });
+    const tipo = req.body?.tipo;
+    const email = normalizarEmail(req.body?.email);
+    if (!TIPOS_CODIGO.has(tipo)) return res.status(400).json({ error: 'Tipo de verificación inválido' });
+    if (!email) return res.status(400).json({ error: 'Ingresá un email válido.' });
 
-    // Para registro: verificar que el email no exista ya
-    if (tipo === 'registro') {
-        const existe = await pool.query('SELECT id FROM Personas WHERE email = $1', [email]);
-        if (existe.rows.length > 0) return res.status(400).json({ error: 'El email ya está registrado' });
-    }
-
+    const respuestaOk = { mensaje: `Código enviado a ${email}`, venceEnMin: CODIGO_TTL_MIN, reenvioEnSeg: CODIGO_REENVIO_SEG };
     try {
-        await enviarCodigo(email, tipo);
-        res.json({ mensaje: `Código enviado a ${email}` });
+        const existe = await pool.query('SELECT id FROM Personas WHERE LOWER(email) = $1', [email]);
+        if (tipo === 'registro' && existe.rows.length > 0) return res.status(400).json({ error: 'El email ya está registrado' });
+        // Cambio de contraseña: solo se escribe a emails de clientes. Si no existe se responde igual, sin enviar nada,
+        // para no revelar qué emails tienen cuenta ni usar el banco para mandar correos a cualquiera.
+        if (tipo === 'password' && existe.rows.length === 0) return res.json(respuestaOk);
+
+        await solicitarCodigo(email, tipo, req.ip);
+        res.json(respuestaOk);
     } catch (err) {
-        console.error('Error al enviar email:', err.message);
-        res.status(500).json({ error: 'No se pudo enviar el email. Verificá la configuración.' });
+        if (err instanceof ErrorVerificacion) return responderErrorVerificacion(res, err);
+        console.error('Error en verificación:', err.message);
+        res.status(500).json({ error: 'No se pudo enviar el email. Probá de nuevo en unos minutos.' });
     }
 });
 
@@ -182,19 +331,17 @@ app.post('/api/verificacion/enviar', async (req, res) => {
 // AUTH — REGISTRO (con verificación de email)
 // ═══════════════════════════════════════════════════════════════════════════════
 app.post('/api/usuarios/registro', async (req, res) => {
-    const { nombre, apellido, dni, email, password, codigoVerificacion } = req.body;
+    const { nombre, apellido, dni, password, codigoVerificacion } = req.body;
+    const email = normalizarEmail(req.body.email);
 
     if (!nombre || !apellido || !dni || !email || !password || !codigoVerificacion) {
         return res.status(400).json({ error: "Faltan datos obligatorios" });
     }
     if (!/^\d{7,8}$/.test(String(dni))) return res.status(400).json({ error: "El DNI debe tener 7 u 8 dígitos" });
 
-    // Verificar código
-    const entry = codigosVerificacion.get(email);
-    if (!entry) return res.status(400).json({ error: 'No se envió código a este email. Solicitá uno primero.' });
-    if (Date.now() > entry.expira) { codigosVerificacion.delete(email); return res.status(400).json({ error: 'El código expiró. Solicitá uno nuevo.' }); }
-    if (entry.codigo !== codigoVerificacion) return res.status(400).json({ error: 'Código de verificación incorrecto.' });
-    codigosVerificacion.delete(email);
+    // Verificar código (sin consumirlo todavía: si falla otra validación, no hace falta pedir uno nuevo)
+    try { verificarCodigo(email, 'registro', codigoVerificacion, false); }
+    catch (err) { if (err instanceof ErrorVerificacion) return responderErrorVerificacion(res, err); throw err; }
 
     const client = await pool.connect();
     try {
@@ -239,6 +386,7 @@ app.post('/api/usuarios/registro', async (req, res) => {
         );
 
         await client.query('COMMIT');
+        codigosVerificacion.delete(email); // código usado
         res.status(201).json({ mensaje: "Usuario creado exitosamente", usuario: { id: idPersona, alias, cbu: cbuOficial } });
 
     } catch (err) {
@@ -760,12 +908,9 @@ app.post('/api/usuarios/:id/cambiar-password', async (req, res) => {
         const ok = await bcrypt.compare(passwordActual, hash);
         if (!ok) return res.status(401).json({ error: "La contraseña actual es incorrecta" });
 
-        // Verificar código
-        const entry = codigosVerificacion.get(email);
-        if (!entry) return res.status(400).json({ error: 'Código no enviado. Solicitá uno primero.' });
-        if (Date.now() > entry.expira) { codigosVerificacion.delete(email); return res.status(400).json({ error: 'El código expiró.' }); }
-        if (entry.codigo !== codigoVerificacion) return res.status(400).json({ error: 'Código incorrecto.' });
-        codigosVerificacion.delete(email);
+        // Verificar código (el emitido para cambiar contraseña; uno de registro no sirve acá)
+        try { verificarCodigo(normalizarEmail(email), 'password', codigoVerificacion); }
+        catch (err) { if (err instanceof ErrorVerificacion) return responderErrorVerificacion(res, err); throw err; }
 
         const nuevoHash = await bcrypt.hash(passwordNueva, 10);
         await pool.query('UPDATE Personas SET password = $1 WHERE id = $2', [nuevoHash, idPersona]);

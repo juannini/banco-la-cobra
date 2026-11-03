@@ -653,11 +653,13 @@
                     </div>
                     <div class="field">
                         <label>Código de 6 dígitos</label>
-                        <input type="text" id="reg-codigo" placeholder="000000" maxlength="6" style="text-align:center;font-size:24px;font-family:'Space Mono',monospace;letter-spacing:6px;font-weight:700">
+                        <input type="text" id="reg-codigo" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" style="text-align:center;font-size:24px;font-family:'Space Mono',monospace;letter-spacing:6px;font-weight:700">
+                        <p class="input-hint" id="reg-vence" style="text-align:center"></p>
                     </div>
                     <p class="msg-error" id="reg-error"></p>
                     <p class="msg-success" id="reg-success"></p>
                     <button class="btn-primary" id="btn-registro" onclick="registro()">🐍 CREAR MI CUENTA</button>
+                    <button class="btn-secondary" id="btn-reenviar-reg" onclick="reenviarCodigoRegistro()">Reenviar código</button>
                     <button class="btn-secondary" onclick="volverRegStep1()">← Volver</button>
                 </div>
             </div>
@@ -1014,11 +1016,13 @@
                     <div style="font-size:28px;margin-bottom:6px">📧</div>
                     <p style="font-size:13px;color:var(--white);font-weight:600">Verificá tu identidad</p>
                     <p style="font-size:12px;color:var(--muted);margin-top:4px">Enviamos un código a tu email</p>
+                    <p style="font-size:11px;color:var(--muted);margin-top:2px" id="pass-vence"></p>
                 </div>
-                <div class="field"><label>Código de verificación</label><input type="text" id="pass-codigo" placeholder="000000" maxlength="6" style="text-align:center;font-size:22px;font-family:'Space Mono',monospace;letter-spacing:6px;font-weight:700"></div>
+                <div class="field"><label>Código de verificación</label><input type="text" id="pass-codigo" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" style="text-align:center;font-size:22px;font-family:'Space Mono',monospace;letter-spacing:6px;font-weight:700"></div>
                 <p class="msg-error" id="pass-error"></p>
                 <p class="msg-success" id="pass-success"></p>
                 <button class="btn-primary" onclick="cambiarPassword()">Confirmar cambio</button>
+                <button class="btn-secondary" id="btn-reenviar-pass" onclick="reenviarCodigoPassword()">Reenviar código</button>
                 <button class="btn-secondary" onclick="volverPassStep1()">← Volver</button>
             </div>
         </div>
@@ -1266,14 +1270,47 @@ async function enviarCodigoRegistro() {
     try {
         const res=await fetch(`${BASE_URL}/api/verificacion/enviar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,tipo:'registro'})});
         const data=await res.json();
-        if (!res.ok) { hint.textContent=data.error||'Error.'; hint.style.color='var(--red-text)'; btn.disabled=false; btn.textContent='Enviar código'; return; }
+        if (!res.ok) { hint.textContent=data.error||'Error.'; hint.style.color='var(--red-text)'; btn.disabled=false; btn.textContent='Enviar código'; if (data.esperar) cuentaRegresiva(btn, data.esperar, 'Enviar código'); return; }
         hint.textContent='✓ Código enviado. Revisá tu bandeja de entrada.'; hint.style.color='var(--green-text)';
         document.getElementById('reg-email-display').textContent=email;
         document.getElementById('reg-step-1').classList.remove('active');
         document.getElementById('reg-step-2').classList.add('active');
-        let s=60;
-        const timer=setInterval(()=>{ s--; btn.textContent=`Reenviar (${s}s)`; if(s<=0){clearInterval(timer);btn.disabled=false;btn.textContent='Enviar código';} },1000);
+        document.getElementById('reg-vence').textContent=`El código vence en ${data.venceEnMin||10} minutos.`;
+        document.getElementById('reg-codigo').value='';
+        ['reg-error','reg-success'].forEach(id=>document.getElementById(id).style.display='none');
+        cuentaRegresiva(btn, data.reenvioEnSeg||60, 'Enviar código');
+        cuentaRegresiva(document.getElementById('btn-reenviar-reg'), data.reenvioEnSeg||60, 'Reenviar código');
     } catch { hint.textContent='Error de conexión.'; hint.style.color='var(--red-text)'; btn.disabled=false; btn.textContent='Enviar código'; }
+}
+
+// Botón deshabilitado con cuenta regresiva ("Reenviar código (45s)") hasta poder pedir otro código
+function cuentaRegresiva(btn, segundos, texto) {
+    if (!btn) return;
+    clearInterval(btn._cuenta);
+    if (segundos <= 0) { btn.disabled=false; btn.textContent=texto; return; }
+    btn.disabled=true;
+    const pintar=()=>{ if (segundos<=0) { clearInterval(btn._cuenta); btn.disabled=false; btn.textContent=texto; return; } btn.textContent=`${texto} (${segundos}s)`; segundos--; };
+    pintar(); btn._cuenta=setInterval(pintar,1000);
+}
+async function pedirCodigo(email, tipo) {
+    const res=await fetch(`${BASE_URL}/api/verificacion/enviar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,tipo})});
+    return { ok:res.ok, data: await res.json().catch(()=>({})) };
+}
+
+// Paso 2 del registro: pedir otro código (el anterior deja de servir)
+async function reenviarCodigoRegistro() {
+    const email=document.getElementById('reg-email').value.trim();
+    const btn=document.getElementById('btn-reenviar-reg');
+    const errorEl=document.getElementById('reg-error'), okEl=document.getElementById('reg-success');
+    errorEl.style.display='none'; okEl.style.display='none'; btn.disabled=true;
+    try {
+        const { ok, data } = await pedirCodigo(email,'registro');
+        if (!ok) { errorEl.textContent=data.error||'No se pudo reenviar el código.'; errorEl.style.display='block'; cuentaRegresiva(btn, data.esperar||0, 'Reenviar código'); return; }
+        okEl.textContent='✓ Te enviamos un código nuevo. El anterior ya no sirve.'; okEl.style.display='block';
+        document.getElementById('reg-codigo').value='';
+        document.getElementById('reg-vence').textContent=`El código vence en ${data.venceEnMin||10} minutos.`;
+        cuentaRegresiva(btn, data.reenvioEnSeg||60, 'Reenviar código');
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; btn.disabled=false; }
 }
 
 function volverRegStep1() {
@@ -1967,7 +2004,24 @@ async function solicitarCodigoPassword() {
         if (!res.ok) { errorEl.textContent=data.error||'Error.'; errorEl.style.display='block'; return; }
         document.getElementById('pass-step-1').classList.remove('active');
         document.getElementById('pass-step-2').classList.add('active');
+        document.getElementById('pass-vence').textContent=`El código vence en ${data.venceEnMin||10} minutos.`;
+        document.getElementById('pass-codigo').value='';
+        ['pass-error','pass-success'].forEach(id=>document.getElementById(id).style.display='none');
+        cuentaRegresiva(document.getElementById('btn-reenviar-pass'), data.reenvioEnSeg||60, 'Reenviar código');
     } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; }
+}
+async function reenviarCodigoPassword() {
+    const btn=document.getElementById('btn-reenviar-pass');
+    const errorEl=document.getElementById('pass-error'), okEl=document.getElementById('pass-success');
+    errorEl.style.display='none'; okEl.style.display='none'; btn.disabled=true;
+    try {
+        const { ok, data } = await pedirCodigo(datosUsuario.email,'password');
+        if (!ok) { errorEl.textContent=data.error||'No se pudo reenviar el código.'; errorEl.style.display='block'; cuentaRegresiva(btn, data.esperar||0, 'Reenviar código'); return; }
+        okEl.textContent='✓ Te enviamos un código nuevo. El anterior ya no sirve.'; okEl.style.display='block';
+        document.getElementById('pass-codigo').value='';
+        document.getElementById('pass-vence').textContent=`El código vence en ${data.venceEnMin||10} minutos.`;
+        cuentaRegresiva(btn, data.reenvioEnSeg||60, 'Reenviar código');
+    } catch { errorEl.textContent='Error de conexión.'; errorEl.style.display='block'; btn.disabled=false; }
 }
 function volverPassStep1() {
     document.getElementById('pass-step-2').classList.remove('active');
